@@ -1,4 +1,5 @@
 from bs4 import BeautifulSoup as bs
+from bs4 import element
 from dateutil import parser
 import datetime
 import time
@@ -13,10 +14,10 @@ house = "California State Assembly"
 df_content = soup.select("form[action='/dailyfile']")[1]
 
 ### FUNCTIONS
-def text_to_date(s):
+def text_to_date(s: str) -> datetime.datetime: #TODO: update per https://stackoverflow.com/questions/33093293/python-dateutil-date-conversion
     return parser.parse(s)
 
-def before_today(s):
+def before_today(s: element.Tag) -> bool:
     """
     I: HTML tag, assuming only contains date-like text
     O: Boolean
@@ -27,11 +28,10 @@ def before_today(s):
     day = text_to_date(s.text)
     return day < datetime.datetime.now()
 
-def get_session(s):
-    dt = parser.parse(s.text)
+def get_session(dt) -> int:
     return dt.year
-
-def adjourned_until(reg_floor_session_header):
+	
+def adjourned_until(reg_floor_session_header: element.Tag) -> datetime.datetime:
     adjourn_p = reg_floor_session_header.next_sibling.next_sibling.next_element
     date_string = ""
     prev_word = ""
@@ -44,10 +44,11 @@ def adjourned_until(reg_floor_session_header):
             prev_word = word
     return text_to_date(date_string)
 
-def get_next_floor_sess():
+def get_next_floor_sess() -> datetime.datetime:
     reg_floor_session_header = df_content.select("h3")[0]
     next_floor_date_h4 = text_to_date(reg_floor_session_header.next_sibling.next_element)
     next_floor_date_p = adjourned_until(reg_floor_session_header)
+    return next_floor_date_p
 ### PLAYGROUND
 ## get current/upcoming floor session date
 # reg_floor_session_tags = df_content.select("h3")
