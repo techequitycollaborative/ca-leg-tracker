@@ -84,7 +84,7 @@ def actions_from_bill_number_status(bill_number: str, session_year="20232024"):
 def bill_number_history(bill_number: str, session_year="20232024"):
     """
     Iterates over the entire history of actions related to bill BILL_NUMBER from session SESSION_YEAR according to the
-    bill's history page.
+    bill's history page and prints current status to terminal.
     """
     bill_id = get_id(bill_number, session_year)
     page = "https://leginfo.legislature.ca.gov/faces/billHistoryClient.xhtml?bill_id=" + bill_id
@@ -98,6 +98,8 @@ def bill_number_history(bill_number: str, session_year="20232024"):
         action = history[i].select("td")[1]
         logging.info(f"date detected: {date.text}")
         logging.info(f"action recorded: {action.text}")
+        if i == 0:
+            print(f"As of {date.text}, {bill_number}'s status is:\n{action.text}")
 
 
 def main():
