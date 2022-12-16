@@ -99,12 +99,14 @@ def bill_number_history(bill_number: str, session_year="20232024"):
         logging.info(f"date detected: {date.text}")
         logging.info(f"action recorded: {action.text}")
         if i == 0:
-            print(f"As of {date.text}, {bill_number}'s status is:\n{action.text}")
+            print(f"The last action taken on {bill_number}:\n{action.text}")
 
 
 def main():
     logging.info("Beginning scrape session...")
-    bill_number_history("AB1162", "20212022")
+    bill_number_history("SCA2", "20212022")
+    bill_number_history("AB2289", "20212022")
+    bill_number_history("AB1651", "20212022")
 
 
 if __name__ == "__main__":
