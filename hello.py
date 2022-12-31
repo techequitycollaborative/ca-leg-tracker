@@ -5,13 +5,20 @@ app = Flask(__name__)
 
 @app.route('/openstates')
 def get_bills():
-	url = "https://v3.openstates.org/bills?jurisdiction=California&sort=updated_desc&page=1&per_page=10&apikey=e3f95a13-7e19-4fef-96dd-72b1ca3da881"
+	url = "https://v3.openstates.org/bills?jurisdiction=California&sort=updated_desc&page=1&per_page=10&apikey="
 
 	response = urllib.request.urlopen(url)
 	data = response.read()
-	dict = json.loads(data)
+	data_dict = json.loads(data)
 
-	return dict["results"][0]
+	# Create a dict that works for us
+	# results_dict = {}
+	# i = 0
+	# for all in data_dict["results"]:
+	# 	results_dict.append("i", i)
+	# 	i++
+
+	return data_dict
 
 
 # jurisdiction needs to be an id or a name:
