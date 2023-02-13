@@ -36,7 +36,7 @@ def actions_from_history_table(page: str):
 
 def add_param_to_search(search_query: str, param: str, value: str) -> str:
     """
-    Adds parameter PARAM to a query string with value VALUE.
+    Adds parameter PARAM to a query string with value: VALUE
     """
     if len(value):
         search_query += f"{param}={value}"
@@ -55,10 +55,14 @@ def actions_from_search(
     [WIP] Selects a bill page from a search query and iterates over the last 5 actions taken from the bill's status
     page.
     """
-    search_query = f'session_year={session_year}&bill_number={bill_number}&house=Both&author={author}&lawCode={law_code}'
+    query_session = f'session_year={session_year}'
+    query_bill_number = f'bill_number={bill_number}'
+    query_author = f'author={author}'
+    query_law_code = f'lawCode={law_code}'
+    search_query = f'{query_session}&{query_bill_number}&house=Both&{query_author}&{query_law_code}'
     add_param_to_search(search_query, "keyword", keyword)
     add_param_to_search(search_query, "lawSectionNum", code_section)
-    page = "https://leginfo.legislature.ca.gov/faces//billSearchClient.xhtml?" + search_query
+    # page = "https://leginfo.legislature.ca.gov/faces//billSearchClient.xhtml?" + search_query
     # TODO: auto-redirect situation
     # TODO: multiple search matches...
     return
@@ -103,11 +107,13 @@ def bill_number_history(bill_number: str, session_year="20232024"):
 
 
 def main():
-    logging.info("Beginning scrape session...")
-    bill_number_history("SCA2", "20212022")
-    bill_number_history("AB2289", "20212022")
-    bill_number_history("AB1651", "20212022")
+    # logging.info("Beginning scrape session...")
+    # bill_number_history("SCA2", "20212022")
+    # bill_number_history("AB2289", "20212022")
+    # bill_number_history("AB1651", "20212022")
+    return None
 
 
 if __name__ == "__main__":
     main()
+
