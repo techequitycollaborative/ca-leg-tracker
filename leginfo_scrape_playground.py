@@ -107,10 +107,12 @@ def bill_number_history(bill_number: str, session_year="20232024"):
 
 
 def main():
-    # logging.info("Beginning scrape session...")
+    logging.info("Beginning scrape session...")
     # bill_number_history("SCA2", "20212022")
     # bill_number_history("AB2289", "20212022")
+    # logging.info(f"Extracting history for AB1651")
     # bill_number_history("AB1651", "20212022")
+
     return None
 
 
