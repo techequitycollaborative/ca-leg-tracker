@@ -1,0 +1,7 @@
+Flask
+datetime
+uuid
+Flask-SQLAlchemy
+PyJWT
+bs4
+python-dateutil
