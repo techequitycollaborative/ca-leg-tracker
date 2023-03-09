@@ -15,31 +15,30 @@ logging.basicConfig(
 
 def pull_daily_update():
     # all active bills - extracted from OpenStates as an array
-    # today_bills = daily_updates.get_bill_data_openstates()
+    today_bills = daily_updates.get_bill_data_openstates()
     # most updated bill histories - extracted from LegInfo
-    # TODO: map bills onto bill_number_history
-    today_bill_history = []
     year = datetime.date.today().strftime("%Y")
     session_year = year + str(int(year) + 1)
     print(session_year)
-    # for bill in today_bills:
-    #     bill_number = bill["bill_num"]
-    #     today_bill_records = daily_updates.bill_number_history(bill_number, session_year)
-    #     bill["status"] = today_bill_records[-1]
-    #     bill["text"] = daily_updates.bill_number_text(bill_number, session_year)
-    #     bill["actions_update"] = today_bill_records # TODO: push to bill_history table only
-    # # most updated committee vote results
-    # today_cmte_vote_result = daily_updates.get_committee_data_openstates()
-    # # most updated house vote results
-    # today_house_vote_result = daily_updates.get_house_vote_result_data_openstates()
-    # return today_bills, today_cmte_vote_result, today_house_vote_result
+    for bill in today_bills:
+        bill_number = bill["bill_num"]
+        today_bill_records = daily_updates.bill_number_history(bill_number, session_year)
+        bill["status"] = today_bill_records[-1]
+        bill["text"] = daily_updates.bill_number_text(bill_number, session_year)
+        bill["actions_update"] = today_bill_records  # TODO: push to bill_history table only
+    # most updated committee vote results
+    today_cmte_vote_result = daily_updates.get_committee_data_openstates()
+    # most updated house vote results
+    today_house_vote_result = daily_updates.get_house_vote_result_data_openstates()
+    return today_bills, today_cmte_vote_result, today_house_vote_result
+
 
 def connect():
     """ Connect to the PostgreSQL database server """
     conn = None
     try:
         # read connection parameters
-        params = config()
+        params = config("postgresql")
 
         # connect to the PostgreSQL server
         print('Connecting to the PostgreSQL database...')

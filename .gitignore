@@ -2,4 +2,5 @@ log
 
 *.ini
 .idea
+*.ini
 __pycache__/

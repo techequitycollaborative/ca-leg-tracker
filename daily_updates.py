@@ -3,6 +3,7 @@ import urllib.request, json
 import psycopg2
 from psycopg2 import Error
 from flask import jsonify
+from config import config
 from bs4 import BeautifulSoup as bs
 from dateutil import parser
 import datetime
@@ -11,6 +12,7 @@ from random import randint
 import logging
 
 app = Flask(__name__)
+app.config['api_key']= config('openstates')
 
 # TODO(juliacordero): Use pagination data to make sure we're getting all data.
 @app.route('/bill-data-openstates')
@@ -121,4 +123,4 @@ def bill_number_text(bill_number: str, session_year="20232024"):
 	page = "https://leginfo.legislature.ca.gov/faces/billTextClient.xhtml?bill_id=" + bill_query
 	text_tag = "div[id='bill_all']"
 	text_soup = make_soup(page, text_tag)[0]
-	return text_soup #TODO: confirm the desired data type for bill text
+	return text_soup  # TODO: confirm the desired data type for bill text
