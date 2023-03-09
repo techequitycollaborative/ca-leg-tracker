@@ -82,6 +82,9 @@ def get_committee_data_openstates():
 		results_array.append(cmte_data)
 
 # TODO(juliacordero): house_vote_result
+@app.route('/house-vote-result-data-openstates')
+def get_house_vote_result_data_openstates():
+	url = "https://v3.openstates.org/bills?jurisdiction=CA&classification=committee&include=links&apikey={INSERTKEY}&page=1&per_page=20"
 
 # jurisdiction needs to be an id or a name:
 # "id": "ocd-jurisdiction/country:us/state:ca/government",
