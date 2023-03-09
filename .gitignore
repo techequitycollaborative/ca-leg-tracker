@@ -15,4 +15,3 @@ ENV/
 env.bak/
 venv.bak/
 log
-.idea
