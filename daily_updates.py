@@ -7,6 +7,7 @@ from config import config
 from bs4 import BeautifulSoup as bs
 from dateutil import parser
 import datetime
+from datetime import date
 import urllib.request
 from random import randint
 import logging
@@ -14,19 +15,37 @@ import logging
 app = Flask(__name__)
 app.config['api_key']= config('openstates')
 
-# TODO(juliacordero): Use pagination data to make sure we're getting all data.
+current_year = int(date.today().strftime("%d/%m/%Y")[:-4])
+next_year = current_year + 1
+current_session = str(current_year) + str(next_year)
+
+# TODO(juliacordero): Fetch abstracts too
 @app.route('/bill-data-openstates')
 def get_bill_data_openstates():
+	i = 1
+	data_dict = {}
+
+	# Get first page
 	url = "https://v3.openstates.org/bills?jurisdiction=California&sort=updated_desc&include=sponsorships&page=1&per_page=10&apikey="
 
 	response = urllib.request.urlopen(url)
 	data = response.read()
 	data_dict = json.loads(data)
+	results_array = data_dict["results"]
+
+	max_page = data_dict["pagination"]["max_page"]
+
+	for i in range (2, max_page):
+		url = "https://v3.openstates.org/bills?jurisdiction=California&sort=updated_desc&include=sponsorships&page=" + str(i) + "&per_page=10&apikey="
+		response = urllib.request.urlopen(url)
+		data = response.read()
+		data_dict = json.loads(data)
+		results_array.extend(data_dict["results"])
 
 	# Create an array of dicts that holds all data about bills
-	results_array = []
-	for obj in data_dict["results"]:
-		if obj["session"] == "20232024":
+	formatted_results_array = []
+	for obj in results_array:
+		if obj["session"] == current_session:
 			author = ""
 			for sponsor in obj["sponsorships"]:
 				if sponsor["primary"]: author = sponsor["name"]
@@ -36,39 +55,82 @@ def get_bill_data_openstates():
 				"origin_house_id": obj["from_organization"]["name"],
 				"author": author
 			}
-			results_array.append(bill_data)
-	return results_array
+			formatted_results_array.append(bill_data)
+	return formatted_results_array
 
-# TODO(juliacordero): Use pagination data to make sure we're getting all data.
 @app.route('/committee-data-openstates')
 def get_committee_data_openstates():
-	url = "https://v3.openstates.org/committees?jurisdiction=CA&classification=committee&include=links&apikey={INSERTKEY}&page=1&per_page=20"
+	i = 1
+	data_dict = {}
+
+	url = "https://v3.openstates.org/committees?jurisdiction=CA&classification=committee&include=links&page=1&per_page=20&apikey={INSERTKEY}"
 	response = urllib.request.urlopen(url)
 	data = response.read()
 	data_dict = json.loads(data)
+	results_array = data_dict["results"]
+
+	max_page = data_dict["pagination"]["max_page"]
+
+	for i in range (2, max_page):
+		url = "https://v3.openstates.org/committees?jurisdiction=CA&classification=committee&include=links&page=" + str(i) + "&per_page=20&apikey={INSERTKEY}"
+		response = urllib.request.urlopen(url)
+		data = response.read()
+		data_dict = json.loads(data)
+		results_array.extend(data_dict["results"])
 
 	# Create an array of dicts that holds all data about cmtes
-	results_array = []
-	for obj in data_dict["results"]:
+	formatted_results_array = []
+	for obj in results_array:
 		homepage_link = ""
 		for curr_link in obj["links"]:
-				if curr_link["note"] == "homepage": homepage_link = curr_link["url"]
+			if curr_link["note"] == "homepage": homepage_link = curr_link["url"]
 		cmte_data = {
 			name: obj["name"],
 			webpage_link: homepage_link
 		}
-		results_array.append(cmte_data)
-	return results_array
+		formatted_results_array.append(cmte_data)
+	return formatted_results_array
 
 
-# TODO(juliacordero): house_vote_result
+#TODO(juliacordero): Need to save bill number so we can look up the right bill ID per house_vote_result_data
 @app.route('/house-vote-result-data-openstates')
 def get_house_vote_result_data_openstates():
-	url = "https://v3.openstates.org/bills?jurisdiction=CA&classification=committee&include=links&apikey={INSERTKEY}&page=1&per_page=20"
+	i = 1
+	data_dict = {}
 
-# jurisdiction needs to be an id or a name:
-# "id": "ocd-jurisdiction/country:us/state:ca/government",
-# "name": "California"
+	url = "https://v3.openstates.org/bills?jurisdiction=California&sort=updated_desc&include=votes&page=1&per_page=20&apikey={INSERTKEY}"
+	response = urllib.request.urlopen(url)
+	data = response.read()
+	data_dict = json.loads(data)
+	results_array = data_dict["results"]
+
+	max_page = data_dict["pagination"]["max_page"]
+
+	for i in range (2, max_page):
+		url = "https://v3.openstates.org/bills?jurisdiction=California&sort=updated_desc&include=votes&page=" + str(i) + "&per_page=20&apikey={INSERTKEY}"
+		response = urllib.request.urlopen(url)
+		data = response.read()
+		data_dict = json.loads(data)
+		results_array.extend(data_dict["results"])
+
+	formatted_results_array = []
+	for obj in results_array:
+		votes_array = obj["votes"]["votes"]
+
+		yes = 0
+		no = 0
+		for vote in votes_array:
+			if vote["option"] == "yes": yes += 1
+			else: no += 1 
+		house_vote_result_data = {
+			date: obj["votes"]["start_date"],
+			votes_for: yes,
+			votes_against: no
+		}
+		formatted_results_array.append(house_vote_result_data)
+
+	return formatted_results_array
+
 
 # leginfo scraping #
 
