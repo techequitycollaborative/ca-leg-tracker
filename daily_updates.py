@@ -26,7 +26,7 @@ def get_bill_data_openstates():
 	data_dict = {}
 
 	# Get first page
-	url = "https://v3.openstates.org/bills?jurisdiction=California&sort=updated_desc&include=sponsorships&page=1&per_page=10&apikey="
+	url = "https://v3.openstates.org/bills?jurisdiction=California&sort=updated_desc&include=sponsorships&include=abstracts&page=1&per_page=10&apikey="
 
 	response = urllib.request.urlopen(url)
 	data = response.read()
@@ -36,7 +36,7 @@ def get_bill_data_openstates():
 	max_page = data_dict["pagination"]["max_page"]
 
 	for i in range (2, max_page):
-		url = "https://v3.openstates.org/bills?jurisdiction=California&sort=updated_desc&include=sponsorships&page=" + str(i) + "&per_page=10&apikey="
+		url = "https://v3.openstates.org/bills?jurisdiction=California&sort=updated_desc&include=sponsorships&include=abstracts&page=" + str(i) + "&per_page=10&apikey="
 		response = urllib.request.urlopen(url)
 		data = response.read()
 		data_dict = json.loads(data)
@@ -51,6 +51,7 @@ def get_bill_data_openstates():
 				if sponsor["primary"]: author = sponsor["name"]
 			bill_data = {
 				"name": obj["title"],
+				"bill_text": obj["abstracts"][0]["abstract"],
 				"bill_num": obj["identifier"],
 				"origin_house_id": obj["from_organization"]["name"],
 				"author": author
