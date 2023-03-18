@@ -19,7 +19,8 @@ current_year = int(date.today().strftime("%d/%m/%Y")[:-4])
 next_year = current_year + 1
 current_session = str(current_year) + str(next_year)
 
-# TODO(juliacordero): Fetch abstracts too
+# open states fetching #
+
 @app.route('/bill-data-openstates')
 def get_bill_data_openstates():
 	i = 1
@@ -92,8 +93,6 @@ def get_committee_data_openstates():
 		formatted_results_array.append(cmte_data)
 	return formatted_results_array
 
-
-#TODO(juliacordero): Need to save bill number so we can look up the right bill ID per house_vote_result_data
 @app.route('/house-vote-result-data-openstates')
 def get_house_vote_result_data_openstates():
 	i = 1
@@ -116,6 +115,8 @@ def get_house_vote_result_data_openstates():
 
 	formatted_results_array = []
 	for obj in results_array:
+		bill_num_var = obj["identifier"]
+
 		votes_array = obj["votes"]["votes"]
 
 		yes = 0
@@ -124,6 +125,7 @@ def get_house_vote_result_data_openstates():
 			if vote["option"] == "yes": yes += 1
 			else: no += 1 
 		house_vote_result_data = {
+			bill_num: bill_num_var
 			date: obj["votes"]["start_date"],
 			votes_for: yes,
 			votes_against: no
