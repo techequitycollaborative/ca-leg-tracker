@@ -13,9 +13,9 @@ from random import randint
 import logging
 
 app = Flask(__name__)
-app.config['api_key']= config('openstates')
+app.config['api_key'] = config('credentials', 'openstates')
 
-current_year = int(date.today().strftime("%d/%m/%Y")[:-4])
+current_year = int(date.today().strftime("%d/%m/%Y")[-4:])
 next_year = current_year + 1
 current_session = str(current_year) + str(next_year)
 
@@ -27,7 +27,7 @@ def get_bill_data_openstates():
 	data_dict = {}
 
 	# Get first page
-	url = "https://v3.openstates.org/bills?jurisdiction=California&sort=updated_desc&include=sponsorships&include=abstracts&page=1&per_page=10&apikey="
+	url = "https://v3.openstates.org/bills?jurisdiction=California&sort=updated_desc&include=sponsorships&include=abstracts&page=1&per_page=10&apikey=" + app.config['api_key']['api_key']
 
 	response = urllib.request.urlopen(url)
 	data = response.read()
@@ -37,7 +37,7 @@ def get_bill_data_openstates():
 	max_page = data_dict["pagination"]["max_page"]
 
 	for i in range (2, max_page):
-		url = "https://v3.openstates.org/bills?jurisdiction=California&sort=updated_desc&include=sponsorships&include=abstracts&page=" + str(i) + "&per_page=10&apikey="
+		url = "https://v3.openstates.org/bills?jurisdiction=California&sort=updated_desc&include=sponsorships&include=abstracts&page=" + str(i) + "&per_page=10&apikey=" + app.config['api_key']['api_key']
 		response = urllib.request.urlopen(url)
 		data = response.read()
 		data_dict = json.loads(data)
@@ -125,7 +125,7 @@ def get_house_vote_result_data_openstates():
 			if vote["option"] == "yes": yes += 1
 			else: no += 1 
 		house_vote_result_data = {
-			bill_num: bill_num_var
+			bill_num: bill_num_var,
 			date: obj["votes"]["start_date"],
 			votes_for: yes,
 			votes_against: no
@@ -138,18 +138,18 @@ def get_house_vote_result_data_openstates():
 # leginfo scraping #
 
 
-def make_soup(page: str, tag_pattern: str):  # HELPER FUNCTION
+def make_soup(page, tag_pattern):  # HELPER FUNCTION
 	url = urllib.request.urlopen(page).read()
 	soup = bs(url, "html.parser")
 	return soup.select(tag_pattern)
 
 
-def get_query(bill_number: str, session_year: str) -> str:  # HELPER FUNCTION
+def get_query(bill_number, session_year):  # HELPER FUNCTION
 	bill_number = bill_number.replace("-", "")
 	return f"{session_year}0{bill_number}"
 
 
-def text_to_date_string(s: str) -> datetime.datetime:
+def text_to_date_string(s):
 	try:
 		dt = parser.parse(s)
 		return dt.strftime("%Y-%m-%d")

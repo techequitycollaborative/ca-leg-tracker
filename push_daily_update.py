@@ -38,15 +38,13 @@ def connect():
     conn = None
     try:
         # read connection parameters
-        params = config("postgresql")
+        params = config("credentials", "postgresql")
 
         # connect to the PostgreSQL server
-        print('Connecting to the PostgreSQL database...')
         conn = psycopg2.connect(**params)
 
         # create a cursor
         cur = conn.cursor()
-
         bills, committee_results, house_results = pull_daily_update()
         # TODO: insert today's bills to the bill table and bill_history table
         # TODO: insert committee results to committee results table
@@ -55,16 +53,13 @@ def connect():
         cur.execute('SELECT bill_id, session FROM ca.bill;')
         # load all actions from leginfo for each bill ID
         for bill_id, session_year in cur.fetchall():
-            cur.execute('SELECT bill_number FROM ca.bill '
-                        f'WHERE bill_id = (SELECT bill_id FROM ca.bill WHERE bill_id = {bill_id});')
+            cur.execute('SELECT bill_number FROM ca.bill WHERE bill_id = (SELECT bill_id FROM ca.bill WHERE bill_id = {bill_id});')
             bill_number = cur.fetchone()[0]
             actions_for_bill = bill_number_history(bill_number, bill_id, session_year)
             # dump all actions to bill_history
             for action in actions_for_bill:
                 print(action)
-                insert_script = 'INSERT INTO ca.bill_history ' \
-                                f'(bill_history_id, bill_id, entry_date, entry_text) ' \
-                                f'VALUES (%s, %s::integer, %s::date, %s);'
+                insert_script = 'INSERT INTO ca.bill_history (bill_history_id, bill_id, entry_date, entry_text) VALUES (%s, %s::integer, %s::date, %s);'
                 cur.execute(insert_script, action)
                 conn.commit()
         # close the communication with the PostgreSQL
