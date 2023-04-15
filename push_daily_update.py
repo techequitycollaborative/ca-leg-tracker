@@ -19,7 +19,6 @@ def pull_daily_update():
     # most updated bill histories - extracted from LegInfo
     year = datetime.date.today().strftime("%Y")
     session_year = year + str(int(year) + 1)
-    print(session_year)
     for bill in today_bills:
         bill_number = bill["bill_num"]
         today_bill_records = daily_updates.bill_number_history(bill_number, session_year)

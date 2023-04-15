@@ -21,6 +21,9 @@ current_session = str(current_year) + str(next_year)
 
 # open states fetching #
 
+#TODO(juliacordero): Commented out all the pagination code until we've been approved for the higher rate limit.
+# Higher rate limit prevents Error 429.
+
 @app.route('/bill-data-openstates')
 def get_bill_data_openstates():
 	i = 1
@@ -36,12 +39,12 @@ def get_bill_data_openstates():
 
 	max_page = data_dict["pagination"]["max_page"]
 
-	for i in range (2, max_page):
-		url = "https://v3.openstates.org/bills?jurisdiction=California&sort=updated_desc&include=sponsorships&include=abstracts&page=" + str(i) + "&per_page=10&apikey=" + app.config['api_key']['api_key']
-		response = urllib.request.urlopen(url)
-		data = response.read()
-		data_dict = json.loads(data)
-		results_array.extend(data_dict["results"])
+	# for i in range (2, max_page):
+	# 	url = "https://v3.openstates.org/bills?jurisdiction=California&sort=updated_desc&include=sponsorships&include=abstracts&page=" + str(i) + "&per_page=10&apikey=" + app.config['api_key']['api_key']
+	# 	response = urllib.request.urlopen(url)
+	# 	data = response.read()
+	# 	data_dict = json.loads(data)
+	# 	results_array.extend(data_dict["results"])
 
 	# Create an array of dicts that holds all data about bills
 	formatted_results_array = []
@@ -50,10 +53,13 @@ def get_bill_data_openstates():
 			author = ""
 			for sponsor in obj["sponsorships"]:
 				if sponsor["primary"]: author = sponsor["name"]
+			bill_text = ""
+			if len(obj["abstracts"]) > 0:
+				bill_text = obj["abstracts"][0]["abstract"]
 			bill_data = {
 				"name": obj["title"],
-				"bill_text": obj["abstracts"][0]["abstract"],
 				"bill_num": obj["identifier"],
+				"bill_text": bill_text,
 				"origin_house_id": obj["from_organization"]["name"],
 				"author": author
 			}
@@ -73,12 +79,12 @@ def get_committee_data_openstates():
 
 	max_page = data_dict["pagination"]["max_page"]
 
-	for i in range (2, max_page):
-		url = "https://v3.openstates.org/committees?jurisdiction=CA&classification=committee&include=links&page=" + str(i) + "&per_page=20&apikey={INSERTKEY}"
-		response = urllib.request.urlopen(url)
-		data = response.read()
-		data_dict = json.loads(data)
-		results_array.extend(data_dict["results"])
+	# for i in range (2, max_page):
+	# 	url = "https://v3.openstates.org/committees?jurisdiction=CA&classification=committee&include=links&page=" + str(i) + "&per_page=20&apikey={INSERTKEY}"
+	# 	response = urllib.request.urlopen(url)
+	# 	data = response.read()
+	# 	data_dict = json.loads(data)
+	# 	results_array.extend(data_dict["results"])
 
 	# Create an array of dicts that holds all data about cmtes
 	formatted_results_array = []
@@ -106,12 +112,12 @@ def get_house_vote_result_data_openstates():
 
 	max_page = data_dict["pagination"]["max_page"]
 
-	for i in range (2, max_page):
-		url = "https://v3.openstates.org/bills?jurisdiction=California&sort=updated_desc&include=votes&page=" + str(i) + "&per_page=20&apikey={INSERTKEY}"
-		response = urllib.request.urlopen(url)
-		data = response.read()
-		data_dict = json.loads(data)
-		results_array.extend(data_dict["results"])
+	# for i in range (2, max_page):
+	# 	url = "https://v3.openstates.org/bills?jurisdiction=California&sort=updated_desc&include=votes&page=" + str(i) + "&per_page=20&apikey={INSERTKEY}"
+	# 	response = urllib.request.urlopen(url)
+	# 	data = response.read()
+	# 	data_dict = json.loads(data)
+	# 	results_array.extend(data_dict["results"])
 
 	formatted_results_array = []
 	for obj in results_array:
@@ -163,6 +169,7 @@ def bill_number_history(bill_number: str, session_year="20232024"):
 	bill's history page and prints current status to terminal.
 	"""
 	bill_query = get_query(bill_number, session_year)
+	#TODO: "URL can't contain control characters." --> error throw because bill_query has a space char in it
 	page = "https://leginfo.legislature.ca.gov/faces/billHistoryClient.xhtml?bill_id=" + bill_query
 	history_table_tag_pattern = "table[id='billhistory'] > tbody > tr"
 	history_soup = make_soup(page, history_table_tag_pattern)
