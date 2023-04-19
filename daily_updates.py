@@ -151,7 +151,7 @@ def make_soup(page, tag_pattern):  # HELPER FUNCTION
 
 
 def get_query(bill_number, session_year):  # HELPER FUNCTION
-	bill_number = bill_number.replace("-", "")
+	bill_number = bill_number.replace("-", "").replace(" ", "")
 	return f"{session_year}0{bill_number}"
 
 
