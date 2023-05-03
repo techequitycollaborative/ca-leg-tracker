@@ -2,19 +2,20 @@ from marshmallow import Schema, fields, post_load
 from db.tables import Bill
 
 
-class BillSchema(Schema):
+class AugmentedBillSchema(Schema):
     """
-    Bill Marshmallow Schema
+    Augmented Bill Marshmallow Schema
 
-    Marshmallow schema used for loading/dumping Bills
+    Marshmallow schema used for loading/dumping Bills augmented with House and Committee Data.
     """
-    bill_id = fields.Integer(allow_none=False)
+    bill_number = fields.String(allow_none=False)
     name = fields.String()
-    bill_number = fields.String()
     full_text = fields.String()
     author = fields.String()
-    origin_house_id = fields.Integer()
-    committee_id = fields.Integer()
+    origin_house_name = fields.String()
+    committee_name = fields.String()
+    committee_webpage = fields.String()
+    committee_house = fields.String()
     status = fields.String()
     session = fields.String()
 
