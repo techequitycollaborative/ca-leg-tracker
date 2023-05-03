@@ -20,4 +20,5 @@ def get_all_full_rows():
         join(House, Bill.origin_house_id==House.house_id).\
         join(Committee, Bill.committee_id==Committee.committee_id).\
         join(committee_houses, Committee.house_id==committee_houses.house_id)
+    session.close()
     return bills
