@@ -1,4 +1,5 @@
 log
 
+*.ini
 .idea
 __pycache__/
