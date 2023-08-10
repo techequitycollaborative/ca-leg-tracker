@@ -4,7 +4,6 @@ import datetime
 import psycopg2
 from random import randint
 from config import config
-
 year = datetime.date.today().strftime("%Y")
 SESSION_YEAR = year + str(int(year) + 1)
 

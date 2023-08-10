@@ -10,7 +10,6 @@ from tqdm import tqdm
 
 app = Flask(__name__)
 app.config['api_key'] = config('openstates')
-
 current_date = date.today().strftime("%Y-%m-%d")
 current_year = int(date.today().strftime("%d/%m/%Y")[-4:])
 next_year = current_year + 1
