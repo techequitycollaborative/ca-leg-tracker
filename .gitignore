@@ -4,3 +4,4 @@ log
 .idea
 *.ini
 __pycache__/
+venv
