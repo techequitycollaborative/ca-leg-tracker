@@ -7,6 +7,7 @@ from config import config
 from time import sleep
 import sys
 from tqdm import tqdm
+from random import uniform
 
 app = Flask(__name__)
 app.config['api_key'] = config('openstates')
@@ -22,16 +23,17 @@ house_map = {
 }
 
 
-def make_api_request(api_request_string, pause=1, backoff=0):
+def make_api_request(api_request_string, pause=0, backoff=0):
     try:
+        sleep(pause)
         response = urllib.request.urlopen(api_request_string)
         return response
     except urllib.error.HTTPError as error:
         print(error)
         if pause <= 16:
-            print("increasing pause length")
             backoff += 1
-            pause = pause/(1/(2**backoff))
+            pause = (1.2 ** backoff) - uniform(0, pause)
+            print("increasing pause length to ", pause)
             make_api_request(api_request_string, pause, backoff)
         else:
             sys.exit(1)
