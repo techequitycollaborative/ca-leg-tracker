@@ -5,3 +5,4 @@ Flask-SQLAlchemy
 PyJWT
 bs4
 python-dateutil
+psycopg2
