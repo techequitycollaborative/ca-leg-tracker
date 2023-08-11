@@ -1,28 +1,30 @@
 import api_requests
 import leginfo_scraper
 import datetime
-import config
 import psycopg2
 from random import randint
+from config import config
 
 year = datetime.date.today().strftime("%Y")
 SESSION_YEAR = year + str(int(year) + 1)
 
 
-def add_bill_id(arr, bill_mapping):
-    for bill in arr:
-        bill_num = arr["identifier"]
-        bill["bill_id"] = bill_mapping[bill_num]
+def add_digit_id(arr, input_field, result_field, give_mapping=False):
+    inputs = [obj[input_field] for obj in arr]
+    mapping = dict([(i, randint(0, len(inputs))) for i in inputs])
+    for obj in arr:
+        obj[result_field] = mapping[obj[input_field]]
+        del obj[input_field]
+    if give_mapping:
+        return arr, mapping
     return arr
 
 
 def openstates_update():
-    updated_bills, updated_house_votes = api_requests.get_bill_votes_data_openstates()
-    bill_numbers = [bill["identifier"] for bill in updated_bills]
-    bill_mapping = dict([(bill_num, randint(0, max(len(updated_bills)))) for bill_num in bill_numbers])
-    updated_bills = add_bill_id(updated_bills, bill_mapping)
-    updated_house_votes = add_bill_id(updated_house_votes, bill_mapping)
-    return updated_bills, updated_house_votes
+    bills, house_votes = api_requests.get_bill_votes_data_openstates()
+    updated_bills, bill_mapping = add_digit_id(bills, "bill_num", "bill_id", True)
+    updated_house_votes = add_digit_id(house_votes, "id", "house_vote_result_id")
+    return updated_bills, updated_house_votes, bill_mapping
 
 
 def leginfo_actions_update(bill_number, bill_id, session_year=SESSION_YEAR):
@@ -53,8 +55,26 @@ def insert_bills(cur, conn, bills):
             print("Failed to insert bill into bill table", error)
 
 
-def insert_house_votes(cur, conn, votes):
-    return
+def insert_house_votes(cur, conn, votes, bill_mapping):
+    for vote in votes:
+        try:
+            insert_query = """INSERT into ca.house_vote_result 
+            (house_vote_result_id, vote_date, bill_id, house_id, votes_for, votes_against) 
+            VALUES (%d, %s, %d, %d, %d, %d)
+            """
+            house_vote_result_id = vote["house_vote_result_id"]
+            vote_date = vote["date"]
+            bill_id = bill_mapping[vote["bill_num"]]
+            house_id = vote["house_id"]
+            votes_for = vote["votes_for"]
+            votes_against = vote["votes_against"]
+            vote_to_insert = (house_vote_result_id, vote_date, bill_id, house_id, votes_for, votes_against)
+            cur.execute(insert_query, vote_to_insert)
+            conn.commit()
+            count = cur.rowcount
+            print(count, "Vote event inserted successfully into table")
+        except (Exception, psycopg2.Error) as error:
+            print("Failed to insert vote event in vote table", error)
 
 
 def update_bill_history(cur, conn):
@@ -68,7 +88,9 @@ def update_bill_history(cur, conn):
         # dump all actions to bill_history
         for action in actions_for_bill:
             print(action)
-            insert_script = 'INSERT INTO ca.bill_history (bill_history_id, bill_id, entry_date, entry_text) VALUES (%s, %s::integer, %s::date, %s);'
+            insert_script = """
+            INSERT INTO ca.bill_history (bill_history_id, bill_id, entry_date, entry_text) 
+            VALUES (%s, %s::integer, %s::date, %s);"""
             cur.execute(insert_script, action)
             conn.commit()
     # close the communication with the PostgreSQL
@@ -82,18 +104,18 @@ def connect():
     conn = None
     try:
         # read connection parameters
-        params = config("credentials.ini", "postgresql")
+        params = config("postgresql")
 
         # connect to the PostgreSQL server
         conn = psycopg2.connect(**params)
 
         # create a cursor
         cur = conn.cursor()
-        updated_bills, updated_house_votes = openstates_update()
+        updated_bills, updated_house_votes, bill_mapping = openstates_update()
         # TODO: insert today's bills to the bill table
         insert_bills(cur, conn, updated_bills)
         # TODO: insert house updates to house results table
-        insert_house_votes(cur, conn, updated_house_votes)
+        insert_house_votes(cur, conn, updated_house_votes, bill_mapping)
         # update bill history
         update_bill_history(cur, conn)
     except (Exception, psycopg2.DatabaseError) as error:
@@ -105,7 +127,7 @@ def connect():
 
 
 def main():
-    updated_bills, updated_house_votes = openstates_update()
+    updated_bills, updated_house_votes, bill_mapping = openstates_update()
     print(len(updated_bills))
     print(len(updated_house_votes))
     # connect()
