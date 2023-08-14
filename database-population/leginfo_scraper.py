@@ -26,9 +26,9 @@ def text_to_date_string(s):
 
 def bill_number_history(bill_number: str, session_year="20232024"):
     """
-	Iterates over the entire history of actions related to bill BILL_NUMBER from session SESSION_YEAR according to the
-	bill's history page and prints current status to terminal.
-	"""
+    Iterates over the entire history of actions related to bill BILL_NUMBER from session SESSION_YEAR according to the
+    bill's history page and prints current status to terminal.
+    """
     bill_query = get_query(bill_number, session_year)
     page = "https://leginfo.legislature.ca.gov/faces/billHistoryClient.xhtml?bill_id=" + bill_query
     history_table_tag_pattern = "table[id='billhistory'] > tbody > tr"
