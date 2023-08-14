@@ -8,6 +8,15 @@ from time import sleep
 import sys
 from tqdm import tqdm
 from random import uniform
+import logging
+
+logging.basicConfig(
+    filename="openstates.log",
+    encoding='utf-8',
+    level=logging.INFO,
+    format='%(asctime)s %(levelname)s: %(message)s',
+    datefmt='%m/%d/%Y %I:%M:%S %p'
+)
 
 app = Flask(__name__)
 app.config['api_key'] = config('openstates')
@@ -23,20 +32,22 @@ house_map = {
 }
 
 
-def make_api_request(api_request_string, pause=0, backoff=0):
+def make_api_request(api_request_string, pause=0.0, backoff=0):
     try:
         sleep(pause)
         response = urllib.request.urlopen(api_request_string)
-        return response
+        logging.info(f"Got response for {api_request_string}")
+        return json.loads(response.read())
     except urllib.error.HTTPError as error:
         print(error)
-        if pause <= 16:
+        if pause <= 20:
             backoff += 1
-            pause = (1.2 ** backoff) - uniform(0, pause)
-            print("increasing pause length to ", pause)
+            pause = (2.5 ** backoff) - uniform(0, (pause * 0.5))
+            logging.info(f"Increasing pause length to {pause}")
             make_api_request(api_request_string, pause, backoff)
         else:
-            sys.exit(1)
+            print("No response from server; try again later.")
+            sys.exit(0)
 
 
 def extract_bill_table_data(results_array):
@@ -96,28 +107,23 @@ def get_bill_votes_data_openstates():
     api_key_string = "&apikey=" + app.config['api_key']['api_key']
     url = url_source + jurisdiction_session_filter + sort_string + include_string + start_page_string \
         + api_key_string
-    response = make_api_request(url)
-    data = response.read()
-    data_dict = json.loads(data)
-    max_page = data_dict["pagination"]["max_page"]
-    print(f"there are {max_page} pages")
-    max_page = min(daily_max, int(max_page))
-    results_array = data_dict["results"]
-    pause = 1
-    for i in tqdm(range(2, max_page + 1)):
-        sleep(pause)
-        api_page_string = f"&page={i}"
-        curr = url_source + jurisdiction_session_filter + sort_string + include_string + api_page_string \
-            + api_key_string
-        response = make_api_request(curr)
-        data = response.read()
-        data_dict = json.loads(data)
-        results_array.extend(data_dict["results"])
-
-    # Create an array of dicts that holds all data about bills
-    bills = extract_bill_table_data(results_array)
-    house_votes = extract_house_vote_result_data(results_array)
-    return bills, house_votes
+    data_dict = make_api_request(url)
+    if data_dict:
+        max_page = data_dict["pagination"]["max_page"]
+        print(f"there are {max_page} pages")
+        max_page = min(daily_max, int(max_page))
+        results_array = data_dict["results"]
+        for i in tqdm(range(2, max_page + 1)):
+            api_page_string = f"&page={i}"
+            curr = url_source + jurisdiction_session_filter + sort_string + include_string + api_page_string \
+                + api_key_string
+            data_dict = make_api_request(curr)
+            if data_dict:
+                results_array.extend(data_dict["results"])
+        # Create an array of dicts that holds all data about bills
+        bills = extract_bill_table_data(results_array)
+        house_votes = extract_house_vote_result_data(results_array)
+        return bills, house_votes
 
 
 def main():
