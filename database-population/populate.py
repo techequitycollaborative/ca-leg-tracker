@@ -26,8 +26,8 @@ def openstates_update():
     return updated_bills, updated_house_votes, bill_mapping
 
 
-def leginfo_actions_update(bill_number, bill_id, session_year=SESSION_YEAR):
-    return leginfo_scraper.bill_number_history(bill_number, bill_id, session_year)
+def leginfo_actions_update(bill_number, session_year=SESSION_YEAR):
+    return leginfo_scraper.bill_number_history(bill_number, session_year)
 
 
 def insert_bills(cur, conn, bills):
@@ -45,7 +45,9 @@ def insert_bills(cur, conn, bills):
             committee_id = 0
             status = ""
             session = ""
-            bill_to_insert = (bill_id, name, bill_num, full_text, author, origin_house_id, committee_id, status, session)
+            bill_to_insert = (
+                bill_id, name, bill_num, full_text, author, origin_house_id, committee_id, status, session
+            )
             cur.execute(insert_query, bill_to_insert)
             conn.commit()
             count = cur.rowcount
@@ -83,7 +85,7 @@ def update_bill_history(cur, conn):
         cur.execute(
             'SELECT bill_number FROM ca.bill WHERE bill_id = (SELECT bill_id FROM ca.bill WHERE bill_id = {bill_id});')
         bill_number = cur.fetchone()[0]
-        actions_for_bill = leginfo_actions_update(bill_number, bill_id, session_year)
+        actions_for_bill = leginfo_actions_update(bill_number, session_year)
         # dump all actions to bill_history
         for action in actions_for_bill:
             print(action)
@@ -134,4 +136,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
