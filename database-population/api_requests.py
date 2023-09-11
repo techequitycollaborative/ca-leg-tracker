@@ -32,19 +32,27 @@ house_map = {
 }
 
 
-def make_api_request(api_request_string, pause=0.0, backoff=0):
+def make_api_request(api_request_string, pause=0.0, backoff=0, tries=1):
     try:
         sleep(pause)
-        response = urllib.request.urlopen(api_request_string)
-        logging.info(f"Got response for {api_request_string}")
+        req = urllib.request.Request(
+            api_request_string,
+            data=None,
+            headers={
+                'User-Agent': 'tester 0.1'
+            }
+        )
+        response = urllib.request.urlopen(req)
+        logging.info(f"Got response for {api_request_string} in {tries} tries.")
         return json.loads(response.read())
     except urllib.error.HTTPError as error:
-        print(error)
+        logging.info(error)
         if pause <= 20:
             backoff += 1
-            pause = (2.5 ** backoff) - uniform(0, (pause * 0.5))
+            tries += 1
+            pause = (2.5 ** backoff) - uniform(0, (pause * 0.2))
             logging.info(f"Increasing pause length to {pause}")
-            make_api_request(api_request_string, pause, backoff)
+            make_api_request(api_request_string, pause, backoff, tries)
         else:
             print("No response from server; try again later.")
             sys.exit(0)
