@@ -2,21 +2,11 @@ import api_requests
 import leginfo_scraper
 import datetime
 import psycopg2
-from random import randint
+from sql_id import add_digit_id
 from config import config
 year = datetime.date.today().strftime("%Y")
 SESSION_YEAR = year + str(int(year) + 1)
 
-
-def add_digit_id(arr, input_field, result_field, give_mapping=False):
-    inputs = [obj[input_field] for obj in arr]
-    mapping = dict([(i, randint(0, len(inputs))) for i in inputs])
-    for obj in arr:
-        obj[result_field] = mapping[obj[input_field]]
-        del obj[input_field]
-    if give_mapping:
-        return arr, mapping
-    return arr
 
 
 def openstates_update():

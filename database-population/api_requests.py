@@ -24,7 +24,7 @@ current_date = date.today().strftime("%Y-%m-%d")
 current_year = int(date.today().strftime("%d/%m/%Y")[-4:])
 next_year = current_year + 1
 current_session = str(current_year) + str(next_year)
-start_page_string = "&page=1"
+start_page_string = "&page=1&per_page=50"
 daily_max = 499
 house_map = {
     "lower": 1,
@@ -32,6 +32,7 @@ house_map = {
 }
 
 
+# Generic API request with exponential backoff
 def make_api_request(api_request_string, pause=0.0, backoff=0, tries=1):
     try:
         sleep(pause)
@@ -58,6 +59,7 @@ def make_api_request(api_request_string, pause=0.0, backoff=0, tries=1):
             sys.exit(0)
 
 
+# Clean up results of API request for bill table
 def extract_bill_table_data(results_array):
     bills = list()
     for obj in results_array:
@@ -80,6 +82,7 @@ def extract_bill_table_data(results_array):
     return bills
 
 
+# Clean up results of API request for chamber votes
 def extract_house_vote_result_data(results_array):
     house_votes = list()
     for obj in results_array:
@@ -105,6 +108,7 @@ def extract_house_vote_result_data(results_array):
     return house_votes
 
 
+# API request for bills and associated voting events
 @app.route('/bill-data-openstates')
 def get_bill_votes_data_openstates():
     url_source = "https://v3.openstates.org/bills?"
@@ -122,7 +126,7 @@ def get_bill_votes_data_openstates():
         max_page = min(daily_max, int(max_page))
         results_array = data_dict["results"]
         for i in tqdm(range(2, max_page + 1)):
-            api_page_string = f"&page={i}"
+            api_page_string = f"&page={i}&per_page=50"
             curr = url_source + jurisdiction_session_filter + sort_string + include_string + api_page_string \
                 + api_key_string
             data_dict = make_api_request(curr)
@@ -134,8 +138,60 @@ def get_bill_votes_data_openstates():
         return bills, house_votes
 
 
+# API request for legislators
+@app.route('/legislator-data-openstates')
+def get_legislator_data_openstates():
+    url_source = "https://v3.openstates.org/people?"
+    jurisdiction_session_filter = "jurisdiction=California"
+    sort_string = "&org_classification="
+    include_string = "&include=links"
+    api_key_string = "&apikey=" + app.config['api_key']['api_key']
+    chambers = {
+        "lower": None,
+        "upper": None
+    }
+    for chamber in chambers.keys():
+        curr_sort = sort_string + chamber
+        url = url_source + jurisdiction_session_filter + curr_sort + include_string + start_page_string \
+            + api_key_string
+        data_dict = make_api_request(url)
+        max_page = data_dict["pagination"]["max_page"]
+        print(f"there are {max_page} pages")
+        max_page = min(daily_max, int(max_page))
+        results_array = data_dict["results"]
+        for i in range(2, max_page + 1):
+            api_page_string = f"&page={i}&per_page=50"
+            curr = url_source + jurisdiction_session_filter + curr_sort + include_string + api_page_string \
+                + api_key_string
+            data_dict = make_api_request(curr)
+            if data_dict:
+                results_array.extend(data_dict["results"])
+        chambers[chamber] = extract_legislator_table_data(results_array, chamber)
+
+    return chambers["lower"] + chambers["upper"]
+
+
+def extract_legislator_table_data(results_array, chamber_classification):
+    legislators = list()
+    classification_map = {
+        "lower": 1,
+        "upper": 2
+    }
+    for obj in tqdm(results_array):
+        chamber_id = classification_map[chamber_classification]
+        legislator_data = {
+            "chamber_id": chamber_id,
+            "name": obj["name"],
+            "district": obj["current_role"]["district"],
+            "party": obj["party"],
+        }
+        legislators.append(legislator_data)
+    return legislators
+
+
+
 def main():
-    get_bill_votes_data_openstates()
+    get_legislator_data_openstates()
 
 
 if __name__ == "__main__":

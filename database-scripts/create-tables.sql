@@ -73,6 +73,13 @@ create table if not exists ca.committee (
 	webpage_link text
 );
 
+create table if not exists ca.legislator (
+    legislator_id integer primary key,
+    chamber_id integer,
+    name text,
+    district integer,
+    party text
+);
 -- USER CUSTOMIZED DATA
 
 create table if not exists ca.bill_issue (
