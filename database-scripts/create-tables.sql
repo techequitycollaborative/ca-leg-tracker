@@ -80,6 +80,12 @@ create table if not exists ca.legislator (
     district integer,
     party text
 );
+
+create table if not exists ca.committee_assignment (
+    committee_assignment_id integer primary key,
+    legislator_id integer,
+    committee_id integer
+);
 -- USER CUSTOMIZED DATA
 
 create table if not exists ca.bill_issue (
