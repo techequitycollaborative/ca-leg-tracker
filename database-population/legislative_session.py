@@ -2,7 +2,7 @@
 import api_requests
 import datetime
 import psycopg2
-from sql_id import add_digit_id
+from make_db_id import add_digit_id
 from config import config
 from sys import exit
 year = datetime.date.today().strftime("%Y")
@@ -47,6 +47,10 @@ def connect():
         conn = psycopg2.connect(**params)
         # create a cursor
         cur = conn.cursor()
+        # clear old data from session-populated tables
+        cur.execute("DELETE FROM ca.legislator")
+        cur.execute("DELETE FROM ca.committee")
+        cur.execute("DELETE FROM ca.committee_assignment")
         # insert legislators into table
         legislators = openstates_update()
         insert_legislators(cur, conn, legislators)

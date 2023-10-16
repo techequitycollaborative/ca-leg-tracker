@@ -2,7 +2,7 @@ import api_requests
 import leginfo_scraper
 import datetime
 import psycopg2
-from sql_id import add_digit_id
+from make_db_id import add_digit_id
 from config import config
 year = datetime.date.today().strftime("%Y")
 SESSION_YEAR = year + str(int(year) + 1)
