@@ -1,8 +1,9 @@
 # Functions to run once per session: legislators, committees, and committee assignments
 import api_requests
+import committee_scraper
 import datetime
 import psycopg2
-from sql_id import add_digit_id
+import make_db_id
 from config import config
 from sys import exit
 year = datetime.date.today().strftime("%Y")
@@ -11,8 +12,14 @@ SESSION_YEAR = year + str(int(year) + 1)
 
 def openstates_update():
     legislators = api_requests.get_legislator_data_openstates()
-    legislators = add_digit_id(legislators, "name", "legislator_id")
+    legislators = make_db_id.map_digit_id(legislators, "name", "legislator_id")
     return legislators
+
+
+def committee_update():
+    committees = committee_scraper.get_assembly_cmte_urls()
+    committees = make_db_id.map_digit_id(committees, "name", "committee_id")
+    return committees
 
 
 def insert_legislators(cur, conn, legislators):
@@ -37,6 +44,28 @@ def insert_legislators(cur, conn, legislators):
             exit(1)
 
 
+def insert_committees(cur, conn, committees):
+    for committee in committees:
+        try:
+            insert_query = """INSERT INTO ca.committee 
+            (committee_id, chamber_id, name, webpage_link) 
+            VALUES (%s, %s, %s, %s)"""
+            committee_to_insert = (
+                committee["committee_id"],
+                committee["chamber_id"],
+                committee["name"],
+                committee["webpage_link"]
+            )
+            cur.execute(insert_query, committee_to_insert)
+            conn.commit()
+            count = cur.rowcount
+            print(count, "Committee inserted successfully into committee table")
+        except (Exception, psycopg2.Error) as error:
+            print("Failed to insert committee into committee table", error)
+            exit(1)
+    return
+
+
 def connect():
     """ Connect to the PostgreSQL database server """
     conn = None
@@ -47,9 +76,17 @@ def connect():
         conn = psycopg2.connect(**params)
         # create a cursor
         cur = conn.cursor()
+        # clear old data from session-populated tables
+        cur.execute("DELETE FROM ca.legislator")
+        cur.execute("DELETE FROM ca.committee")
+        cur.execute("DELETE FROM ca.committee_assignment")
         # insert legislators into table
         legislators = openstates_update()
         insert_legislators(cur, conn, legislators)
+        # insert committees into table
+        committees = committee_update()
+        insert_committees(cur, conn, committees)
+        # TODO: map legislators to committees, insert assignments into table
     except (Exception, psycopg2.DatabaseError) as error:
         print("Failed to update records", error)
     finally:
