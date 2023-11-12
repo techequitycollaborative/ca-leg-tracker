@@ -4,4 +4,6 @@ drop table if exists ca.chamber_vote_result;
 drop table if exists ca.committee_vote_result;
 drop table if exists ca.chamber;
 drop table if exists ca.committee;
+drop table if exists ca.committee_assignment;
+drop table if exists ca.legislator;
 drop table if exists ca.chamber_schedule;
