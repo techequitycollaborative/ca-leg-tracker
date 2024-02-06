@@ -30,6 +30,7 @@ def get_foreign_key(foreign_array, field, val):
             continue
 
 
+#TODO: index memberships on district number, not names
 def map_committee_memberships(legislators, committees):
     results = list()
     for committee in committees:
@@ -125,15 +126,15 @@ def connect():
         # create a cursor
         cur = conn.cursor()
         # clear old data from session-populated tables
-        # cur.execute("DELETE FROM ca.legislator")
-        # cur.execute("DELETE FROM ca.committee")
+        cur.execute("DELETE FROM ca.legislator")
+        cur.execute("DELETE FROM ca.committee")
         cur.execute("DELETE FROM ca.committee_assignment")
         # insert legislators into table
         legislators = openstates_update()
-        # insert_legislators(cur, conn, legislators)
+        insert_legislators(cur, conn, legislators)
         # insert committees into table
         committees = committee_update()
-        # insert_committees(cur, conn, committees)
+        insert_committees(cur, conn, committees)
         # map legislators to committees, insert assignments into table
         assignments = map_committee_memberships(legislators, committees)
         for a in assignments:

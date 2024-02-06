@@ -4,7 +4,6 @@ import urllib.error
 import json
 from datetime import date
 from config import config
-import pickle
 from time import sleep
 import sys
 from tqdm import tqdm
@@ -118,6 +117,7 @@ def get_today_bill_votes():
     jurisdiction_session_filter = "jurisdiction=California&session=20232024"
     sort_string = f"&sort=updated_desc&created_since={current_date}&classification=bill"
     # sort_string = f"&sort=updated_desc&updated_since=2024-02-01&classification=bill"
+
     include_string = "&include=sponsorships&include=abstracts&include=votes"
     api_key_string = "&apikey=" + app.config['api_key']['api_key']
     url = url_source + jurisdiction_session_filter + sort_string + include_string + start_page_string \
@@ -213,9 +213,7 @@ def extract_legislator_table_data(results_array, chamber_classification):
 
 
 def main():
-    # get_bill_votes_data_openstates()
-    with open('test_bill_extract.pickle', mode='rb') as f:
-        extract_bill_table_data(pickle.load(f))
+    get_bill_votes_data_openstates()
 
 
 if __name__ == "__main__":
