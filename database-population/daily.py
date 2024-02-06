@@ -23,7 +23,7 @@ def leginfo_actions_update(bill_number, session_year=SESSION_YEAR):
 def insert_bills(cur, conn, bills):
     for bill in bills:
         try:
-            insert_query = """INSERT INTO ca.bill 
+            insert_query = """INSERT INTO ca_test.bill 
             (bill_id, name, bill_number, full_text, author, origin_house_id, committee_id, status, session) 
             VALUES (%d, %s, %s, %s, %s, %d, %d, %s, %s)"""
             bill_id = bill["bill_id"]

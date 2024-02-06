@@ -31,5 +31,10 @@ dbname = *********
 sslmode = require
 ```
 
-This will be parsed by `config.py` which enables the pSQL and OpenStates API.  
+This will be parsed by `config.py` which enables access to the pSQL and OpenStates APIs.  
 
+## Manual Database Population (INTERIM)
+
+### Populate Today's Bill Data
+
+### Populate Bill Data by Name

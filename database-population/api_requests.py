@@ -4,6 +4,7 @@ import urllib.error
 import json
 from datetime import date
 from config import config
+import pickle
 from time import sleep
 import sys
 from tqdm import tqdm
@@ -23,10 +24,13 @@ app.config['api_key'] = config('openstates')
 current_date = date.today().strftime("%Y-%m-%d")
 current_year = int(date.today().strftime("%d/%m/%Y")[-4:])
 next_year = current_year + 1
-current_session = str(current_year) + str(next_year)
-start_page_string = "&page=1&per_page=50"
+# current_session = str(current_year) + str(next_year)
+current_session = "20232024"
+start_page_string = "&page=1&per_page=10"
 daily_max = 499
-house_map = {
+chamber_map = {
+    "Assembly": 1,
+    "Senate": 2,
     "lower": 1,
     "upper": 2
 }
@@ -38,7 +42,6 @@ def make_api_request(api_request_string, pause=0.0, backoff=0, tries=1):
         sleep(pause)
         req = urllib.request.Request(
             api_request_string,
-            data=None,
             headers={
                 'User-Agent': 'tester 0.1'
             }
@@ -48,7 +51,7 @@ def make_api_request(api_request_string, pause=0.0, backoff=0, tries=1):
         return json.loads(response.read())
     except urllib.error.HTTPError as error:
         logging.info(error)
-        if pause <= 20:
+        if pause <= 30:
             backoff += 1
             tries += 1
             pause = (2.5 ** backoff) - uniform(0, (pause * 0.2))
@@ -59,7 +62,7 @@ def make_api_request(api_request_string, pause=0.0, backoff=0, tries=1):
             sys.exit(0)
 
 
-# Clean up results of API request for bill table
+# Clean up results of API request for bill table - CALLED BY get_today_bill_votes and get_named_bill_votes
 def extract_bill_table_data(results_array):
     bills = list()
     for obj in results_array:
@@ -75,7 +78,7 @@ def extract_bill_table_data(results_array):
                 "name": obj["title"],
                 "bill_num": obj["identifier"],
                 "bill_text": bill_text,
-                "origin_house_id": obj["from_organization"]["name"],
+                "origin_chamber_id": chamber_map[obj["from_organization"]["name"]],
                 "author": author
             }
             bills.append(bill_data)
@@ -83,19 +86,19 @@ def extract_bill_table_data(results_array):
 
 
 # Clean up results of API request for chamber votes
-def extract_house_vote_result_data(results_array):
-    house_votes = list()
+def extract_chamber_vote_result_data(results_array):
+    chamber_votes = list()
     for obj in results_array:
         bill_num_var = obj["identifier"]
         votes_array = obj["votes"]
         for vote_event in votes_array:
             vote_date = vote_event["start_date"]
             vote_id = vote_event["id"]
-            vote_house = house_map[vote_event["organization"]["classification"]]
+            vote_house = chamber_map[vote_event["organization"]["classification"]]
             vote_count_map = dict()
             for vote_count in vote_event["counts"]:
                 vote_count_map[vote_count["option"]] = vote_count["value"]
-            house_vote_result_data = {
+            chamber_vote_result_data = {
                 "id": vote_id,
                 "bill_num": bill_num_var,
                 "date": vote_date,
@@ -104,17 +107,17 @@ def extract_house_vote_result_data(results_array):
                 "votes_against": vote_count_map["no"],
                 "votes_other": vote_count_map["other"]
             }
-            house_votes.append(house_vote_result_data)
-    return house_votes
+            chamber_votes.append(chamber_vote_result_data)
+    return chamber_votes
 
 
 # API request for bills and associated voting events
 @app.route('/bill-data-openstates')
-def get_bill_votes_data_openstates():
+def get_today_bill_votes():
     url_source = "https://v3.openstates.org/bills?"
     jurisdiction_session_filter = "jurisdiction=California&session=20232024"
-    # sort_string = f"&sort=updated_desc&updated_since={current_date}"
-    sort_string = f"&sort=updated_desc&updated_since=2023-01-01&classification=bill"
+    sort_string = f"&sort=updated_desc&created_since={current_date}&classification=bill"
+    # sort_string = f"&sort=updated_desc&updated_since=2024-02-01&classification=bill"
     include_string = "&include=sponsorships&include=abstracts&include=votes"
     api_key_string = "&apikey=" + app.config['api_key']['api_key']
     url = url_source + jurisdiction_session_filter + sort_string + include_string + start_page_string \
@@ -125,8 +128,8 @@ def get_bill_votes_data_openstates():
         print(f"there are {max_page} pages")
         max_page = min(daily_max, int(max_page))
         results_array = data_dict["results"]
-        for i in tqdm(range(2, max_page + 1)):
-            api_page_string = f"&page={i}&per_page=50"
+        for i in range(2, max_page + 1):
+            api_page_string = f"&page={i}&per_page=10"
             curr = url_source + jurisdiction_session_filter + sort_string + include_string + api_page_string \
                 + api_key_string
             data_dict = make_api_request(curr)
@@ -134,8 +137,28 @@ def get_bill_votes_data_openstates():
                 results_array.extend(data_dict["results"])
         # Create an array of dicts that holds all data about bills
         bills = extract_bill_table_data(results_array)
-        house_votes = extract_house_vote_result_data(results_array)
-        return bills, house_votes
+        chamber_votes = extract_chamber_vote_result_data(results_array)
+        return bills, chamber_votes
+
+
+@app.route('/bill-data-openstates')
+def get_named_bill_votes(bill_name):
+    url_source = "https://v3.openstates.org/bills?"
+    jurisdiction_session_filter = "jurisdiction=California&session=20232024"
+    identifier = f'&identifier={bill_name}'
+    sort_string = f"&sort=updated_desc"
+    include_string = "&include=sponsorships&include=abstracts&include=votes"
+    api_key_string = "&apikey=" + app.config['api_key']['api_key']
+    url = url_source + jurisdiction_session_filter + identifier + sort_string + include_string + start_page_string \
+        + api_key_string
+    data_dict = make_api_request(url)
+    if data_dict:
+        results_array = data_dict["results"]
+        # Create an array of dicts that holds all data about bills
+        bills = extract_bill_table_data(results_array)
+        chamber_votes = extract_chamber_vote_result_data(results_array)
+        print(chamber_votes)
+        return bills, chamber_votes
 
 
 # API request for legislators
@@ -189,9 +212,10 @@ def extract_legislator_table_data(results_array, chamber_classification):
     return legislators
 
 
-
 def main():
-    get_legislator_data_openstates()
+    # get_bill_votes_data_openstates()
+    with open('test_bill_extract.pickle', mode='rb') as f:
+        extract_bill_table_data(pickle.load(f))
 
 
 if __name__ == "__main__":
