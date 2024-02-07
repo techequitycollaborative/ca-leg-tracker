@@ -14,11 +14,12 @@ def requested_openstates_update():
     bills = []
     chamber_votes = []
     with open("bill_request_list.txt", mode="r") as f:
-        for curr_bill in f:
-            curr_bill = "%20".join(curr_bill.strip().split(" "))
-            results = api_requests.get_named_bill_votes(curr_bill)
-            bills.extend(results[0])
-            chamber_votes.extend(results[1])
+        for curr_bill in f.readlines():
+            if len(curr_bill) > 0:
+                curr_bill = "%20".join(curr_bill.strip().split(" "))
+                results = api_requests.get_named_bill_votes(curr_bill)
+                bills.extend(results[0])
+                chamber_votes.extend(results[1])
     return bills, chamber_votes
 
 
@@ -27,21 +28,25 @@ def leginfo_actions_update(bill_number, session_year=SESSION_YEAR):
 
 
 def insert_bills(cur, conn, bills):
+    insert_query = """INSERT INTO ca_test.bill 
+                (bill_id, bill_name, bill_number, full_text, author, coauthors, origin_chamber_id, committee_id, status, 
+                leginfo_link, leg_session) 
+                VALUES (DEFAULT, %s, %s, %s, %s, %s, %s::integer, %s::integer, %s, %s, %s)"""
     for bill in bills:
         try:
-            insert_query = """INSERT INTO ca_test.bill 
-            (bill_name, bill_number, full_text, author, origin_chamber_id, committee_id, status, session) 
-            VALUES (%s, %s, %s, %s, %s::integer, %s::integer, %s, %s)"""
-            name = bill["name"]
-            bill_num = bill["bill_num"]
-            full_text = bill["bill_text"]
+            bill_name = bill["bill_name"]
+            bill_number = bill["bill_number"]
+            full_text = bill["full_text"]
             author = bill["author"]
-            origin_chamber_id = 0
-            committee_id = 0
-            status = ""
-            session = ""
+            coauthors = bill["coauthors"]
+            origin_chamber_id = bill["origin_chamber_id"]
+            committee_id = bill["committee_id"]
+            status = bill["status"]
+            leginfo_link = bill["leginfo_link"]
+            leg_session = bill["leg_session"]
             bill_to_insert = (
-                name, bill_num, full_text, author, origin_chamber_id, committee_id, status, session
+                bill_name, bill_number, full_text, author, coauthors, origin_chamber_id, committee_id, status,
+                leginfo_link, leg_session
             )
             cur.execute(insert_query, bill_to_insert)
             conn.commit()
@@ -53,27 +58,24 @@ def insert_bills(cur, conn, bills):
 
 def insert_chamber_votes(cur, conn, votes):
     insert_query = """INSERT into ca_test.house_vote_result 
-                (vote_date, bill_id, chamber_id, votes_for, votes_against) 
-                VALUES (%s, %s::integer, %s::integer, %s::integer, %s::integer)
-                """
-    for bill_id, session_year in cur.fetchall():
-        cur.execute(
-            'SELECT bill_id, bill_number FROM ca_test.bill WHERE bill_id = (SELECT bill_id FROM ca_test.bill WHERE '
-            'bill_id = {bill_id});'
-        )
-        bill_id = cur.fetchone()[0]
-        bill_number = cur.fetchone()[1]
+                    (vote_date, bill_id, chamber_id, votes_for, votes_against, votes_other) 
+                    VALUES (%s, %s::integer, %s::integer, %s::integer, %s::integer, %s::integer)
+                    """
+    cur.execute('SELECT bill_id, bill_number FROM ca_test.bill;')
+    for bill_id, bill_number in cur.fetchall():
         for vote in votes:
             try:
-                vote_date = vote["date"]
-                house_id = vote["house_id"]
-                votes_for = vote["votes_for"]
-                votes_against = vote["votes_against"]
-                vote_to_insert = (vote_date, bill_id, house_id, votes_for, votes_against)
-                cur.execute(insert_query, vote_to_insert)
-                conn.commit()
-                count = cur.rowcount
-                print(count, "Vote event inserted successfully into table")
+                if bill_number == vote["bill_number"]:
+                    vote_date = vote["vote_date"]
+                    chamber_id = vote["chamber_id"]
+                    votes_for = vote["votes_for"]
+                    votes_against = vote["votes_against"]
+                    votes_other = votes["votes_other"]
+                    vote_to_insert = (vote_date, bill_id, chamber_id, votes_for, votes_against, votes_other)
+                    print(vote_to_insert)
+                    cur.execute(insert_query, vote_to_insert)
+                    count = cur.rowcount
+                    print(count, "Vote event inserted successfully into table")
             except (Exception, psycopg2.Error) as error:
                 print("Failed to insert vote event in vote table", error)
         conn.commit()
@@ -82,6 +84,9 @@ def insert_chamber_votes(cur, conn, votes):
 
 
 def update_bill_history(cur, conn):
+    insert_script = """
+                INSERT INTO ca.bill_history (bill_id, entry_date, entry_text) 
+                VALUES (%s::integer, %s::date, %s);"""
     cur.execute('SELECT bill_id, session FROM ca_test.bill;')
     # load all actions from leginfo for each bill ID
     for bill_id, session_year in cur.fetchall():
@@ -92,9 +97,6 @@ def update_bill_history(cur, conn):
         # dump all actions to bill_history
         for action in actions_for_bill:
             print(action)
-            insert_script = """
-            INSERT INTO ca.bill_history (bill_id, entry_date, entry_text) 
-            VALUES (%s::integer, %s::date, %s);"""
             cur.execute(insert_script, action)
             conn.commit()
     # close the communication with the PostgreSQL

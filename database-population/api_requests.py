@@ -2,11 +2,10 @@ from flask import Flask
 import urllib.request
 import urllib.error
 import json
-from datetime import date
+import datetime
 from config import config
 from time import sleep
 import sys
-from tqdm import tqdm
 from random import uniform
 import logging
 
@@ -20,8 +19,8 @@ logging.basicConfig(
 
 app = Flask(__name__)
 app.config['api_key'] = config('openstates')
-current_date = date.today().strftime("%Y-%m-%d")
-current_year = int(date.today().strftime("%d/%m/%Y")[-4:])
+current_date = datetime.date.today().strftime("%Y-%m-%d")
+current_year = int(datetime.date.today().strftime("%d/%m/%Y")[-4:])
 next_year = current_year + 1
 # current_session = str(current_year) + str(next_year)
 current_session = "20232024"
@@ -61,24 +60,35 @@ def make_api_request(api_request_string, pause=0.0, backoff=0, tries=1):
             sys.exit(0)
 
 
+# TODO: confirm author conditionals compared to OS API
 # Clean up results of API request for bill table - CALLED BY get_today_bill_votes and get_named_bill_votes
 def extract_bill_table_data(results_array):
     bills = list()
     for obj in results_array:
         if obj["session"] == current_session:
             author = ""
+            coauthors = []
             for sponsor in obj["sponsorships"]:
-                if sponsor["primary"]:
-                    author = sponsor["name"]
+                if sponsor["classification"] == "author":
+                    if sponsor["primary"]:
+                        author = sponsor["person"]["name"]
+                    else:
+                        coauthors.append(sponsor["name"])
             bill_text = ""
             if len(obj["abstracts"]) > 0:
                 bill_text = obj["abstracts"][0]["abstract"]
             bill_data = {
-                "name": obj["title"],
-                "bill_num": obj["identifier"],
-                "bill_text": bill_text,
+                "bill_name": obj["title"],
+                "bill_number": obj["identifier"],
+                "full_text": bill_text,
                 "origin_chamber_id": chamber_map[obj["from_organization"]["name"]],
-                "author": author
+                "author": author,
+                "coauthors": ", ".join(coauthors),
+                "committee_id": 0,  # TODO: figure out committee ID population...
+                "status": obj["latest_action_description"],
+                "leginfo_link": obj["sources"][0]["url"],
+                "leg_session": current_session
+
             }
             bills.append(bill_data)
     return bills
@@ -88,23 +98,21 @@ def extract_bill_table_data(results_array):
 def extract_chamber_vote_result_data(results_array):
     chamber_votes = list()
     for obj in results_array:
-        bill_num_var = obj["identifier"]
         votes_array = obj["votes"]
         for vote_event in votes_array:
-            vote_date = vote_event["start_date"]
-            vote_id = vote_event["id"]
+            vote_time = vote_event["start_date"]
+            vote_date = datetime.datetime.strptime(vote_time.split("T")[0], "%Y-%m-%d").date()
             vote_house = chamber_map[vote_event["organization"]["classification"]]
             vote_count_map = dict()
             for vote_count in vote_event["counts"]:
                 vote_count_map[vote_count["option"]] = vote_count["value"]
             chamber_vote_result_data = {
-                "id": vote_id,
-                "bill_num": bill_num_var,
-                "date": vote_date,
-                "house_id": vote_house,
+                "vote_date": vote_date,
+                "chamber_id": vote_house,
                 "votes_for": vote_count_map["yes"],
                 "votes_against": vote_count_map["no"],
-                "votes_other": vote_count_map["other"]
+                "votes_other": vote_count_map["other"],
+                "bill_number": obj["identifier"]
             }
             chamber_votes.append(chamber_vote_result_data)
     return chamber_votes
@@ -116,9 +124,7 @@ def get_today_bill_votes():
     url_source = "https://v3.openstates.org/bills?"
     jurisdiction_session_filter = "jurisdiction=California&session=20232024"
     sort_string = f"&sort=updated_desc&created_since={current_date}&classification=bill"
-    # sort_string = f"&sort=updated_desc&updated_since=2024-02-01&classification=bill"
-
-    include_string = "&include=sponsorships&include=abstracts&include=votes"
+    include_string = "&include=sponsorships&include=abstracts&include=actions&include=sources&include=votes"
     api_key_string = "&apikey=" + app.config['api_key']['api_key']
     url = url_source + jurisdiction_session_filter + sort_string + include_string + start_page_string \
         + api_key_string
@@ -147,7 +153,7 @@ def get_named_bill_votes(bill_name):
     jurisdiction_session_filter = "jurisdiction=California&session=20232024"
     identifier = f'&identifier={bill_name}'
     sort_string = f"&sort=updated_desc"
-    include_string = "&include=sponsorships&include=abstracts&include=votes"
+    include_string = "&include=sponsorships&include=abstracts&include=actions&include=sources&include=votes"
     api_key_string = "&apikey=" + app.config['api_key']['api_key']
     url = url_source + jurisdiction_session_filter + identifier + sort_string + include_string + start_page_string \
         + api_key_string
@@ -157,7 +163,6 @@ def get_named_bill_votes(bill_name):
         # Create an array of dicts that holds all data about bills
         bills = extract_bill_table_data(results_array)
         chamber_votes = extract_chamber_vote_result_data(results_array)
-        print(chamber_votes)
         return bills, chamber_votes
 
 
@@ -200,7 +205,7 @@ def extract_legislator_table_data(results_array, chamber_classification):
         "lower": 1,
         "upper": 2
     }
-    for obj in tqdm(results_array):
+    for obj in results_array:
         chamber_id = classification_map[chamber_classification]
         legislator_data = {
             "chamber_id": chamber_id,
@@ -213,7 +218,7 @@ def extract_legislator_table_data(results_array, chamber_classification):
 
 
 def main():
-    get_bill_votes_data_openstates()
+    get_named_bill_votes("AB%201")
 
 
 if __name__ == "__main__":
