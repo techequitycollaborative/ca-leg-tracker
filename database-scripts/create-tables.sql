@@ -71,6 +71,14 @@ create table if not exists ca.chamber_schedule (
     source text
 );
 
+create table if not exists ca.chamber_schedule (
+    schedule_id integer primary key,
+    chamber_id integer,
+    event_date text,
+    description text,
+    source text
+);
+
 create table if not exists ca.committee (
     committee_id serial primary key,
     chamber_id integer,
@@ -93,8 +101,11 @@ create table if not exists ca.legislator (
     party text
 );
 
-
-
+create table if not exists ca.committee_assignment (
+    committee_assignment_id integer primary key,
+    legislator_id integer,
+    committee_id integer
+);
 -- USER CUSTOMIZED DATA
 
 create table if not exists ca.app_user (

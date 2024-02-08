@@ -31,5 +31,21 @@ dbname = *********
 sslmode = require
 ```
 
-This will be parsed by `config.py` which enables the pSQL and OpenStates API.  
+This will be parsed by `config.py` which enables access to the pSQL and OpenStates APIs.  
 
+## Manual Database Population (INTERIM)
+*NOTE: Internal testing has revealed the OpenStates daily request limit is actually ~250.*
+
+### Populate Today's Bill Data
+Adding a `--today` flag filters the request to OpenStates API for bills created on the current date.
+```commandline
+cd database-population
+python manual_daily.py --today
+```
+### Populate Bill Data by Name
+Adding a `--named` flag filters the request to OpenStates API for the bill(s) from the current session whose "AB X" or 
+"SB Y"-format names have been added to a helper file, `bill_request_list.txt`, which should be tracked locally. 
+```commandline
+cd database-population
+python manual_daily.py --named
+```

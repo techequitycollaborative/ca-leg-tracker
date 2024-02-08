@@ -22,6 +22,33 @@ def committee_update():
     return committees
 
 
+def get_foreign_key(foreign_array, field, val):
+    for e in foreign_array:
+        if e[field] == val:
+            return e
+        else:
+            continue
+
+
+#TODO: index memberships on district number, not names
+def map_committee_memberships(legislators, committees):
+    results = list()
+    for committee in committees:
+        url = committee["webpage_link"]
+        cmte_id = committee["committee_id"]
+        memberships = committee_scraper.get_assembly_cmte_members(url)
+        for member in memberships:
+            try:
+                member["legislator_id"] = get_foreign_key(legislators, "name", member["name"])["legislator_id"]
+            except:
+                print(member["name"], committee)
+            del member["name"]
+            member["committee_id"] = cmte_id
+        results.extend(memberships)
+    results = make_db_id.generate_digit_id(results, "committee_assignment_id")
+    return results
+
+
 def insert_legislators(cur, conn, legislators):
     for legislator in legislators:
         try:
@@ -66,6 +93,28 @@ def insert_committees(cur, conn, committees):
     return
 
 
+def insert_committee_assignments(cur, conn, memberships):
+    for membership in memberships:
+        try:
+            insert_query = """INSERT INTO ca.committee_assignment
+            (committee_id, chamber_id, name, webpage_link) 
+            VALUES (%s, %s, %s, %s)"""
+            assignment_to_insert = (
+                membership["committee_assignment_id"],
+                membership["committee_id"],
+                membership["legislator_id"],
+                membership["assignment_type"]
+            )
+            cur.execute(insert_query, assignment_to_insert)
+            conn.commit()
+            count = cur.rowcount
+            print(count, "Assignment inserted successfully into table")
+        except (Exception, psycopg2.Error) as error:
+            print("Failed to insert assignment into table", error)
+            exit(1)
+    return
+
+
 def connect():
     """ Connect to the PostgreSQL database server """
     conn = None
@@ -86,7 +135,11 @@ def connect():
         # insert committees into table
         committees = committee_update()
         insert_committees(cur, conn, committees)
-        # TODO: map legislators to committees, insert assignments into table
+        # map legislators to committees, insert assignments into table
+        assignments = map_committee_memberships(legislators, committees)
+        for a in assignments:
+            print(a)
+        insert_committee_assignments(cur, conn, assignments)
     except (Exception, psycopg2.DatabaseError) as error:
         print("Failed to update records", error)
     finally:

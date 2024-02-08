@@ -7,6 +7,7 @@ senate_cmte_home = "https://www.senate.ca.gov/committees"
 
 
 def make_soup(chamber):
+    soup = None
     pat = None
     chamber_url = None
     if chamber == "assembly":
@@ -30,6 +31,28 @@ def get_assembly_cmte_urls():
             "chamber_id": 1
         }
         results.append(cmte_data)
+    return results
+
+
+def get_assembly_cmte_members(cmte_url):
+    url = cmte_url + "/members"
+    pat = "div[id='block-wdscommitteemembershipblock'] > table"
+    source = scraper_utils.make_static_soup(url, pat)[0].find_all("tr")[1:]
+    results = list()
+    for i in source:
+        member_role = i.select_one("td > a").text.split("(")
+        cmte_member_data = None
+        if len(member_role) == 1:
+            cmte_member_data = {
+                "name": member_role[0].strip(),
+                "assignment_type": "Member"
+            }
+        elif len(member_role) == 2:
+            cmte_member_data = {
+                "name": member_role[0].strip(),
+                "assignment_type": member_role[1].replace(")", "").strip()
+            }
+        results.append(cmte_member_data)
     return results
 
 
