@@ -5,6 +5,8 @@ create schema if not exists ca;
 
 create table if not exists ca.bill (
     bill_id serial primary key,
+    openstates_id text,
+    openstates_last_updated timestamp,
     bill_name text,
     bill_number text,
     full_text text,
@@ -21,7 +23,9 @@ create table if not exists ca.bill_history (
     bill_history_id serial primary key,
     bill_id integer,
     event_date date,
-    event_text text
+    event_text text,
+    chamber_id integer,
+    history_order integer
 );
 
 create table if not exists ca.bill_schedule (
@@ -36,6 +40,9 @@ create table if not exists ca.chamber_vote_result (
     vote_date date,
     bill_id integer,
     chamber_id integer,
+    vote_text text,
+    vote_threshold text,
+    vote_result text,
     votes_for integer,
     votes_against integer,
     votes_other integer
@@ -206,6 +213,8 @@ values
 
 
 -- GRANTS
+
+grant usage on schema ca to [FRONTEND_USER];
 
 grant select on all tables in schema ca to [FRONTEND_USER];
 
