@@ -1,8 +1,10 @@
 CREATE VIEW ca.bill_latest_actions AS
 SELECT b.bill_id,
     bd.dashboard_id,
+    f.first_date,
     h.event_date AS last_date,
     h.event_text AS last_text,
+    h.event_chamber AS last_chamber,
     s.event_date AS next_date,
     s.event_text AS next_text,
     u.user_date,
@@ -14,14 +16,17 @@ LEFT JOIN (
         a.bill_id,
         a.event_date,
         a.event_text,
+        a.event_chamber,
         a."row"
     FROM (
-        SELECT bill_history.bill_history_id,
-            bill_history.bill_id,
-            bill_history.event_date,
-            bill_history.event_text,
-            row_number() OVER (PARTITION BY bill_history.bill_id ORDER BY bill_history.event_date DESC, bill_history.bill_history_id) AS "row"
-        FROM ca.bill_history
+        SELECT bh.bill_history_id,
+            bh.bill_id,
+            bh.event_date,
+            bh.event_text,
+            c.name as event_chamber,
+            row_number() OVER (PARTITION BY bh.bill_id ORDER BY bh.event_date DESC, bh.bill_history_id) AS "row"
+        FROM ca.bill_history bh
+        LEFT JOIN ca.chamber c USING(chamber_id)
     ) a
     WHERE a."row" = 1
 ) h USING (bill_id)
@@ -58,5 +63,11 @@ LEFT JOIN (
     JOIN ca.bill_dashboard b USING(bill_dashboard_id)
     WHERE a."row" = 1
 ) u USING (bill_id,dashboard_id)
+LEFT JOIN (
+    SELECT bill_id,
+        MIN(event_date) AS first_date
+    FROM ca.bill_history
+    GROUP BY bill_id
+) f USING (bill_id)
 ;
 GRANT SELECT ON ca.bill_latest_actions TO [FRONTEND_USER];
