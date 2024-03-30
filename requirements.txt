@@ -6,3 +6,4 @@ PyJWT
 bs4
 python-dateutil
 psycopg2
+playwright
