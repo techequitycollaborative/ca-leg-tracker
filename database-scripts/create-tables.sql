@@ -1,10 +1,14 @@
-create schema if not exists ca;
+-- Replace [LEGTRACKER_SCHEMA] with primary schema name
+-- Replace [FRONTEND_USER] with webapp db username
+-- Replace [BACKEND_USER] with scripting db username
 
+create schema if not exists [LEGTRACKER_SCHEMA];
 
 -- BILL DATA
 
-create table if not exists ca.bill (
+create table if not exists [LEGTRACKER_SCHEMA].bill (
     bill_id serial primary key,
+    openstates_bill_id text unique,
     bill_name text,
     bill_number text,
     full_text text,
@@ -17,31 +21,36 @@ create table if not exists ca.bill (
     leg_session text
 );
 
-create table if not exists ca.bill_history (
+create table if not exists [LEGTRACKER_SCHEMA].bill_history (
     bill_history_id serial primary key,
     bill_id integer,
     event_date date,
-    event_text text
+    event_text text,
+    chamber_id integer,
+    history_order integer
 );
 
-create table if not exists ca.bill_schedule (
+create table if not exists [LEGTRACKER_SCHEMA].bill_schedule (
     bill_schedule_id serial primary key,
     bill_id integer,
     event_date date,
     event_text text
 );
 
-create table if not exists ca.chamber_vote_result (
+create table if not exists [LEGTRACKER_SCHEMA].chamber_vote_result (
     chamber_vote_result_id serial primary key,
     vote_date date,
     bill_id integer,
     chamber_id integer,
+    vote_text text,
+    vote_threshold text,
+    vote_result text
     votes_for integer,
     votes_against integer,
     votes_other integer
 );
 
-create table if not exists ca.committee_vote_result (
+create table if not exists [LEGTRACKER_SCHEMA].committee_vote_result (
     committee_vote_result_id serial primary key,
     vote_date date,
     bill_id integer,
@@ -54,7 +63,7 @@ create table if not exists ca.committee_vote_result (
 
 -- CHAMBER AND COMMITTEE DATA
 
-create table if not exists ca.chamber (
+create table if not exists [LEGTRACKER_SCHEMA].chamber (
     chamber_id serial primary key,
     name text
 );
@@ -63,7 +72,7 @@ values
 (1, 'Assembly'),
 (2, 'Senate');
 
-create table if not exists ca.chamber_schedule (
+create table if not exists [LEGTRACKER_SCHEMA].chamber_schedule (
     schedule_id serial primary key,
     chamber_id integer,
     event_date text,
@@ -71,29 +80,21 @@ create table if not exists ca.chamber_schedule (
     source text
 );
 
-create table if not exists ca.chamber_schedule (
-    schedule_id integer primary key,
-    chamber_id integer,
-    event_date text,
-    description text,
-    source text
-);
-
-create table if not exists ca.committee (
+create table if not exists [LEGTRACKER_SCHEMA].committee (
     committee_id serial primary key,
     chamber_id integer,
     name text,
     webpage_link text
 );
 
-create table if not exists ca.committee_assignment (
+create table if not exists [LEGTRACKER_SCHEMA].committee_assignment (
     committee_assignment_id serial primary key,
     legislator_id integer,
     committee_id integer,
     assignment_type text
 );
 
-create table if not exists ca.legislator (
+create table if not exists [LEGTRACKER_SCHEMA].legislator (
     legislator_id serial primary key,
     chamber_id integer,
     name text,
@@ -101,32 +102,30 @@ create table if not exists ca.legislator (
     party text
 );
 
-create table if not exists ca.committee_assignment (
-    committee_assignment_id integer primary key,
-    legislator_id integer,
-    committee_id integer
-);
+
+
 -- USER CUSTOMIZED DATA
 
-create table if not exists ca.app_user (
+create table if not exists [LEGTRACKER_SCHEMA].app_user (
     user_id serial primary key,
-    user_name text
+    user_name text,
+    user_access_level text
 );
 
-create table if not exists ca.bill_community_sponsor (
+create table if not exists [LEGTRACKER_SCHEMA].bill_community_sponsor (
     bill_community_sponsor_id serial primary key,
     bill_details_id integer,
     community_org_id integer
 );
 
-create table if not exists ca.bill_dashboard (
+create table if not exists [LEGTRACKER_SCHEMA].bill_dashboard (
 	bill_dashboard_id serial primary key,
 	dashboard_id integer,
 	bill_id integer,
     hidden boolean default false
 );
 
-create table if not exists ca.bill_details (
+create table if not exists [LEGTRACKER_SCHEMA].bill_details (
     bill_details_id serial primary key,
     bill_dashboard_id integer,
     alternate_name text,
@@ -136,23 +135,23 @@ create table if not exists ca.bill_details (
     assigned_user_id integer
 );
 
-create table if not exists ca.bill_issue (
+create table if not exists [LEGTRACKER_SCHEMA].bill_issue (
     bill_issue_id serial primary key,
     issue_id integer,
     bill_details_id integer
 );
 
-create table if not exists ca.community_org (
+create table if not exists [LEGTRACKER_SCHEMA].community_org (
     community_org_id serial primary key,
     community_org_name text
 );
 
-create table if not exists ca.dashboard (
+create table if not exists [LEGTRACKER_SCHEMA].dashboard (
     dashboard_id serial primary key,
     dashboard_name text
 );
 
-create table if not exists ca.discussion_comment (
+create table if not exists [LEGTRACKER_SCHEMA].discussion_comment (
     discussion_comment_id serial primary key,
     bill_dashboard_id integer,
     user_id integer,
@@ -160,12 +159,12 @@ create table if not exists ca.discussion_comment (
     comment_text text
 );
 
-create table if not exists ca.issue (
+create table if not exists [LEGTRACKER_SCHEMA].issue (
     issue_id serial primary key,
     issue_name text
 );
 
-create table if not exists ca.org_position (
+create table if not exists [LEGTRACKER_SCHEMA].org_position (
     org_position_id serial primary key,
     org_position_name text
 );
@@ -175,7 +174,7 @@ values
 (2, 'Supporting'),
 (3, 'Priority');
 
-create table if not exists ca.user_action (
+create table if not exists [LEGTRACKER_SCHEMA].user_action (
     user_action_id serial primary key,
     bill_dashboard_id integer,
     user_id integer,
@@ -188,12 +187,12 @@ create table if not exists ca.user_action (
     notes text
 );
 
-create table if not exists ca.user_action_type (
+create table if not exists [LEGTRACKER_SCHEMA].user_action_type (
     user_action_type_id serial primary key,
     user_action_type_name text
 );
 
-create table if not exists ca.user_action_status (
+create table if not exists [LEGTRACKER_SCHEMA].user_action_status (
     user_action_status_id serial primary key,
     user_action_status_name text
 );
@@ -207,22 +206,36 @@ values
 
 -- GRANTS
 
-grant select on all tables in schema ca to [FRONTEND_USER];
+-- Frontend
+grant usage on schema [LEGTRACKER_SCHEMA] to [FRONTEND_USER];
 
-grant usage, select on all sequences in schema ca to [FRONTEND_USER];
+grant select on all tables in schema [LEGTRACKER_SCHEMA] to [FRONTEND_USER];
+
+grant usage, select on all sequences in schema [LEGTRACKER_SCHEMA] to [FRONTEND_USER];
 
 grant update, insert, delete on
-    ca.app_user,
-    ca.bill_community_sponsor,
-    ca.community_org,
-    ca.bill_dashboard,
-    ca.bill_details,
-    ca.bill_issue,
-    ca.dashboard,
-    ca.discussion_comment,
-    ca.issue,
-    ca.org_position,
-    ca.user_action,
-    ca.user_action_type,
-    ca.user_action_status
+    [LEGTRACKER_SCHEMA].app_user,
+    [LEGTRACKER_SCHEMA].bill_community_sponsor,
+    [LEGTRACKER_SCHEMA].community_org,
+    [LEGTRACKER_SCHEMA].bill_dashboard,
+    [LEGTRACKER_SCHEMA].bill_details,
+    [LEGTRACKER_SCHEMA].bill_issue,
+    [LEGTRACKER_SCHEMA].dashboard,
+    [LEGTRACKER_SCHEMA].discussion_comment,
+    [LEGTRACKER_SCHEMA].issue,
+    [LEGTRACKER_SCHEMA].org_position,
+    [LEGTRACKER_SCHEMA].user_action,
+    [LEGTRACKER_SCHEMA].user_action_type,
+    [LEGTRACKER_SCHEMA].user_action_status
 to [FRONTEND_USER];
+
+-- Backend
+grant usage on schema [LEGTRACKER_SCHEMA] to [BACKEND_USER];
+
+grant select, update, insert, delete, truncate on
+    [LEGTRACKER_SCHEMA].bill,
+    [LEGTRACKER_SCHEMA].bill_history,
+    [LEGTRACKER_SCHEMA].chamber_vote_result
+to [BACKEND_USER];
+
+
