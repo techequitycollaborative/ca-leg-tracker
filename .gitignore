@@ -16,3 +16,5 @@ ENV/
 env.bak/
 venv.bak/
 *.log
+
+.DS_Store
