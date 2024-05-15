@@ -248,5 +248,3 @@ grant select, update, insert, delete, truncate on
     [LEGTRACKER_SCHEMA].bill_history,
     [LEGTRACKER_SCHEMA].chamber_vote_result
 to [BACKEND_USER];
-
-

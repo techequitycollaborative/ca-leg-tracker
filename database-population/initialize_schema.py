@@ -3,7 +3,7 @@ import psycopg2
 
 LEGTRACKER_SCHEMA = config('postgresql_schemas')['legtracker_schema']
 FRONTEND_USER = config('postgresql_schemas')['frontend_user']
-BACKEND_USER = config('postgresql_schemas')['openstates_schema']
+BACKEND_USER = config('postgresql_schemas')['backend_user']
 create_tb_fd = open('../database-scripts/create-tables.sql', 'r')
 create_tb_file = create_tb_fd.read()
 create_tb_fd.close()
