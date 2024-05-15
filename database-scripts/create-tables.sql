@@ -44,7 +44,7 @@ create table if not exists [LEGTRACKER_SCHEMA].chamber_vote_result (
     chamber_id integer,
     vote_text text,
     vote_threshold text,
-    vote_result text
+    vote_result text,
     votes_for integer,
     votes_against integer,
     votes_other integer
@@ -67,7 +67,7 @@ create table if not exists [LEGTRACKER_SCHEMA].chamber (
     chamber_id serial primary key,
     name text
 );
-insert into ca.chamber (chamber_id, name)
+insert into [LEGTRACKER_SCHEMA].chamber (chamber_id, name)
 values
 (1, 'Assembly'),
 (2, 'Senate');
@@ -112,10 +112,10 @@ create table if not exists [LEGTRACKER_SCHEMA].app_user (
     user_access_level text
 );
 
-create table if not exists [LEGTRACKER_SCHEMA].bill_community_sponsor (
-    bill_community_sponsor_id serial primary key,
+create table if not exists [LEGTRACKER_SCHEMA].bill_priority (
+    bill_priority_id serial primary key,
     bill_details_id integer,
-    community_org_id integer
+    priority_id integer
 );
 
 create table if not exists [LEGTRACKER_SCHEMA].bill_dashboard (
@@ -129,10 +129,12 @@ create table if not exists [LEGTRACKER_SCHEMA].bill_details (
     bill_details_id serial primary key,
     bill_dashboard_id integer,
     alternate_name text,
-    policy_notes text,
+    assigned_user_id integer,
     org_position_id integer,
-    political_intel text,
-    assigned_user_id integer
+    community_sponsor text,
+    coalition text,
+    policy_notes text,
+    political_intel text
 );
 
 create table if not exists [LEGTRACKER_SCHEMA].bill_issue (
@@ -141,10 +143,16 @@ create table if not exists [LEGTRACKER_SCHEMA].bill_issue (
     bill_details_id integer
 );
 
-create table if not exists [LEGTRACKER_SCHEMA].community_org (
-    community_org_id serial primary key,
-    community_org_name text
+create table if not exists [LEGTRACKER_SCHEMA].priority_tier (
+    priority_id serial primary key,
+    priority_description text
 );
+insert into [LEGTRACKER_SCHEMA].priority_tier (priority_id, priority_description)
+values
+(1, 'Sponsored'),
+(2, 'Priority'),
+(3, 'No Priority'),
+(4, 'Position');
 
 create table if not exists [LEGTRACKER_SCHEMA].dashboard (
     dashboard_id serial primary key,
@@ -168,11 +176,14 @@ create table if not exists [LEGTRACKER_SCHEMA].org_position (
     org_position_id serial primary key,
     org_position_name text
 );
-insert into ca.org_position (org_position_id, org_position_name)
+insert into [LEGTRACKER_SCHEMA].org_position (org_position_id, org_position_name)
 values
-(1, 'Monitoring'),
-(2, 'Supporting'),
-(3, 'Priority');
+(1, 'Needs Decision'),
+(2, 'Neutral/No Position'),
+(3, 'Support'),
+(4, 'Support, if Amended'),
+(5, 'Oppose'),
+(6, 'Oppose, unless Amended');
 
 create table if not exists [LEGTRACKER_SCHEMA].user_action (
     user_action_id serial primary key,
@@ -196,7 +207,7 @@ create table if not exists [LEGTRACKER_SCHEMA].user_action_status (
     user_action_status_id serial primary key,
     user_action_status_name text
 );
-insert into ca.user_action_status (user_action_status_id, user_action_status_name)
+insert into [LEGTRACKER_SCHEMA].user_action_status (user_action_status_id, user_action_status_name)
 values
 (1, 'Planned'),
 (2, 'In Progress'),
@@ -215,8 +226,8 @@ grant usage, select on all sequences in schema [LEGTRACKER_SCHEMA] to [FRONTEND_
 
 grant update, insert, delete on
     [LEGTRACKER_SCHEMA].app_user,
-    [LEGTRACKER_SCHEMA].bill_community_sponsor,
-    [LEGTRACKER_SCHEMA].community_org,
+    [LEGTRACKER_SCHEMA].bill_priority,
+    [LEGTRACKER_SCHEMA].priority_tier,
     [LEGTRACKER_SCHEMA].bill_dashboard,
     [LEGTRACKER_SCHEMA].bill_details,
     [LEGTRACKER_SCHEMA].bill_issue,
