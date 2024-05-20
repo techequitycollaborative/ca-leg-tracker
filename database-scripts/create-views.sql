@@ -70,6 +70,5 @@ LEFT JOIN (
         MIN(event_date) AS first_date
     FROM [LEGTRACKER_SCHEMA].bill_history
     GROUP BY bill_id
-) f USING (bill_id)
-;
+) f USING (bill_id);
 GRANT SELECT ON [LEGTRACKER_SCHEMA].bill_latest_actions TO [FRONTEND_USER];
