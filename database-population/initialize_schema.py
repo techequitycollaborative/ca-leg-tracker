@@ -23,7 +23,7 @@ def extract_commands(stream):
         elif command[0] == "-":
             continue
         else:
-            command = command.replace("[LEGTRACKER_SCHEMA]", LEGTRACKER_SCHEMA)
+            command = command.strip().replace("[LEGTRACKER_SCHEMA]", LEGTRACKER_SCHEMA)
             command = command.replace("[FRONTEND_USER]", FRONTEND_USER)
             command = command.replace("[BACKEND_USER]", BACKEND_USER)
             result.append(command)
@@ -32,7 +32,7 @@ def extract_commands(stream):
 
 def main():
     conn = None
-    current_command = None
+    command = None
     drop_commands = extract_commands(drop_file.split(';'))
     create_tb_commands = extract_commands(create_tb_file.split(';'))
     create_view_commands = extract_commands(create_view_file.split(';'))
@@ -55,9 +55,7 @@ def main():
             if len(command):
                 cur.execute(command)
         conn.commit()
-
     except (Exception, psycopg2.DatabaseError) as error:
-        print(current_command)
         print("Failed to update records", error)
     finally:
         if conn is not None:
