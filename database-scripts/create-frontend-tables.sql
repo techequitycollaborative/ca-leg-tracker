@@ -219,7 +219,6 @@ values
 
 -- Frontend
 grant usage on schema [LEGTRACKER_SCHEMA] to [FRONTEND_USER];
-
 grant select on all tables in schema [LEGTRACKER_SCHEMA] to [FRONTEND_USER];
 
 grant usage, select on all sequences in schema [LEGTRACKER_SCHEMA] to [FRONTEND_USER];
