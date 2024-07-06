@@ -1,6 +1,7 @@
 log
 bill_request_list.txt
 
+*local.sql
 *.ini
 .idea
 *.ini
