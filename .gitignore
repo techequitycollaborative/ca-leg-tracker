@@ -5,6 +5,7 @@ bill_request_list.txt
 *.ini
 .idea
 *.ini
+.ipynb_checkpoints/
 __pycache__/
 *.py[cod]
 *$py.class
