@@ -44,7 +44,7 @@ def scrape_dailyfile(
             if idx == 0: # Special case for the floor session
                 floor_date = scraper_utils.text_to_date_string(section.select_one('div.header').text)
                 if "No agendas are found for this event." in section.text:
-                    return 0 #TODO: define better behavior for undetermined agendas that can be more easily parsed downstream
+                    continue #TODO: define better behavior for undetermined agendas that can be more easily parsed downstream
                 else:
                     # Find the full agenda
                     agenda = section.select_one('div.attribute.agenda-container:not(.hide)')
@@ -53,7 +53,7 @@ def scrape_dailyfile(
                     for a in floor_actions:
                         # Extract measures AKA bills to be covered in the floor session and union with existing results
                         measures = a.find_next_sibling("div", class_="agenda-item").select("span.measureLink")
-                        floor_session_results = floor_session_results | collect_measures(floor_date, a, measures)
+                        floor_session_results = floor_session_results | collect_measures(floor_date, a.text.title(), measures)
             else:
                 hearing_description = section.select_one('div.header').text.title()
                 # Extract event date
