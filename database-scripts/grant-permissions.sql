@@ -28,5 +28,6 @@ grant usage on schema [LEGTRACKER_SCHEMA] to [BACKEND_USER];
 grant select, update, insert, delete, truncate on
     [LEGTRACKER_SCHEMA].bill,
     [LEGTRACKER_SCHEMA].bill_history,
-    [LEGTRACKER_SCHEMA].chamber_vote_result
+    [LEGTRACKER_SCHEMA].chamber_vote_result,
+    [LEGTRACKER_SCHEMA].bill_schedule
 to [BACKEND_USER];
