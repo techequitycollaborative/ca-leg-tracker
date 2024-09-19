@@ -1,4 +1,5 @@
 import assembly_dailyfile_scraper as assembly
+import senate_dailyfile_scraper as senate
 import pandas as pd
 from config import config
 import psycopg2
@@ -96,7 +97,7 @@ def legtracker_update(cur, schedule_data):
 
 def fetch_schedule_update():
     assembly_update = assembly.scrape_dailyfile()
-    senate_update = set()
+    senate_update = senate.scrape_dailyfile()
     return assembly_update, senate_update
 
 
