@@ -68,12 +68,12 @@ def process_bill_json(data, last_update):
                 sponsor.append(next_sponsor['name'])
                 if 'person' in next_sponsor.keys():
                     sponsor.append(next_sponsor['person']['name'])
-                    if 'current_role' in next_sponsor['person'].keys():
-                        sponsor.append(next_sponsor['person']['current_role']['title'])
-                        sponsor.append(next_sponsor['person']['current_role']['district'])
-                    else:
-                        sponsor.append('')
-                        sponsor.append('')
+                    sponsor.append(next_sponsor['person']['current_role']['title'])
+                    sponsor.append(next_sponsor['person']['current_role']['district'])
+                else:
+                    sponsor.append('')
+                    sponsor.append('')
+                    sponsor.append('')
                 sponsor.append(str(next_sponsor['primary']))
                 sponsor.append(next_sponsor['classification'])
                 bill_sponsors.append(sponsor)
