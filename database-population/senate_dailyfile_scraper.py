@@ -27,7 +27,6 @@ def scrape_dailyfile(
             # Extract current date
             current_wrapper = wrappers.nth(i)
             current_date = scraper_utils.text_to_date_string(current_wrapper.locator("h2.page-events__date").first.inner_text())
-            print(current_date)
 
             # Detect empty content
             empty_wrapper = page.locator("div.no-results-message")
@@ -45,7 +44,6 @@ def scrape_dailyfile(
                 for j in range(hearing_elements.count()):
                     current_hearing = hearing_elements.nth(j)
                     current_name = current_hearing.locator("div.hearing-name").inner_text().title()
-                    print(current_name)
                     current_agenda = current_hearing.get_by_role("link", name="View Agenda")
                     scraper_utils.view_agenda(page, current_agenda)
 
