@@ -4,6 +4,7 @@ from config import config
 import psycopg2
 from io import StringIO
 import csv
+from datetime import date
 
 OPENSTATES_SCHEMA = config('postgresql_schemas')['openstates_schema']
 LEGTRACKER_SCHEMA = config('postgresql_schemas')['legtracker_schema']
@@ -282,7 +283,7 @@ def main():
         # fetch bills from openstates updated since last timestamp
         last_update = get_last_update_timestamp(cur)
         print('Last update timestamp: ' + last_update)
-        print('Fetching bill updates')
+        print('Fetching bill updates as of ' + date.today())
         bill_updates = fetch_bill_updates(last_update)
 
         print('Summary of bills being updated:')
