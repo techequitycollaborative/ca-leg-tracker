@@ -74,7 +74,6 @@ def process_bill_json(data, last_update):
                     else:
                         sponsor.append('')
                         sponsor.append('')
-                        sponsor.append('')
                 sponsor.append(str(next_sponsor['primary']))
                 sponsor.append(next_sponsor['classification'])
                 bill_sponsors.append(sponsor)
