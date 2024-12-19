@@ -1,16 +1,18 @@
 # ca-leg-tracker
 
+:warning: _NOTE: This repository is no longer under active development. The content represents v1 efforts to develop a legislation tracker by TechEquity's Civic Tech volunteer team._ :warning:
+
 ## `database-scripts`
-Scripts in this folder are responsible for creating and dropping tables in the pSQL schema. **All DB design changes 
-(ex: new fields, data type changes) need to be reflected in all `.sql` files.**
+Scripts in this folder generate the postgreSQL schemas and tables as the back-end of a legislation tracker. 
+
+**Reminder: make sure that all DB design changes (ex: new fields, data type changes) are reflected in the .SQL files**
 
 ## `database-population`
 Scripts in this folder handle database population from external sources (anything not created by a tool user). Database
 population relies on configuration of a developer's credentials (see below). These credentials are ingested by 
-`config.py` which is called by both `*_fetch.py` scripts. The fetching scripts are called by one or more `*_update.py` scripts.
+`config.py` which is called by both `*_fetch.py` scripts. The results of the fetching scripts are used by one or more `*_update.py` scripts.
 
 Data that can't be sourced through OpenStates will be scraped by the relevant `*_scraper.py` or `*_parser.py` file. 
-**The scripts in this folder are actively under construction.** Data population features are recorded in this repo's issues. 
 
 ## Credentials
 Locally configure a `credentials.ini` file. For example:
