@@ -1,16 +1,7 @@
 import json
 from config import config
 from time import sleep
-import logging
 import requests
-
-# logging.basicConfig(
-#     filename="openstates.log",
-#     encoding='utf-8',
-#     level=logging.INFO,
-#     format='%(asctime)s %(levelname)s: %(message)s',
-#     datefmt='%m/%d/%Y %I:%M:%S %p'
-# )
 
 
 # Global constants

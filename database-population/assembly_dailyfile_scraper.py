@@ -4,27 +4,6 @@ from datetime import date
 from playwright.sync_api import sync_playwright
 import scraper_utils
 
-
-# def normalize_bill_number(text):
-#     return text.replace("No.", "").replace(".", "").strip()
-
-
-# def collect_measures(event_date, event_description, sel):
-#     results = set()
-#     for measure in sel:
-#         results.add((event_date, event_description, normalize_bill_number(measure.text)))
-#     return results
-
-
-# def view_agenda(page, link):
-#     try:
-#         link.wait_for(state='attached')
-#         link.click()
-#         page.wait_for_timeout(1000) # Wait for content to load
-#     except Exception as e:
-#         return e
-#     return
-
 def scrape_dailyfile(
         url="https://www.assembly.ca.gov/schedules-publications/assembly-daily-file"
 ):
