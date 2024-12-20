@@ -1,3 +1,16 @@
+"""
+This script executes daily updates for both the snapshot (OpenStates) and front-end (legtracker) schemas.
+
+Input: optional flag for forced update when schemas are out of sync
+Output: None; database update messages printed to console/log.
+
+First, fetch each page of possible updates from OpenStates and write to a Pandas dataframe. The first
+stage of manipulation is upserting a 'snapshot' of Openstates data to the snapshot schema. Next,
+this snapshot schema's content is wrangled into the front-end tables. Database manipulation is done by
+executing SQL queries with formatted Python strings and psycopg2 commands.
+
+Note: SQL query logic has unresolved bugs for updating bill_history table
+"""
 import argparse
 import bill_openstates_fetch as openstates
 import pandas as pd
@@ -7,19 +20,30 @@ from io import StringIO
 import csv
 from datetime import datetime
 
+# Index into credentials.ini for DB schema names
 OPENSTATES_SCHEMA = config('postgresql_schemas')['openstates_schema']
 LEGTRACKER_SCHEMA = config('postgresql_schemas')['legtracker_schema']
 
 LAST_UPDATED_DEFAULT = '2000-01-01T00:00:00'
 
+# Define columns for OpenStates API requests
 BILL_COLUMNS = ['openstates_bill_id', 'session', 'chamber', 'bill_num', 'title', 'created_at', 'updated_at', 'first_action_date', 'last_action_date', 'abstract']
 BILL_ACTION_COLUMNS = ['openstates_bill_id', 'chamber', 'description', 'action_date', 'action_order']
 BILL_SPONSOR_COLUMNS = ['openstates_bill_id', 'name', 'full_name', 'title', 'district', 'primary_author', 'type']
 BILL_VOTE_COLUMNS = ['openstates_bill_id', 'motion_text', 'vote_date', 'vote_location', 'vote_result', 'vote_threshold', 'yes_count', 'no_count', 'other_count']
 
 
-# Creates or updates openstates bills
 def openstates_upsert_bills(cur, bills):
+    """
+    Input: psycopg2 cursor, array of bill data in Openstates structure
+    Output: None (creates temporary CSV and executes SQL queries)
+
+    After writing all new bills to a temp CSV file, use temp SQL table to upsert live bills table
+    in the OPENSTATES_SCHEMA
+    """
+
+    # Create a temporary bill table by copying OPENSTATES_SCHEMA.bill columns
+    # WHERE false clause is shortcut to creating empty temporary table
     temp_table_name = 'bill_temp'
     temp_table_query = """
         CREATE TEMPORARY TABLE {0} AS
@@ -29,11 +53,17 @@ def openstates_upsert_bills(cur, bills):
     """
     cur.execute(temp_table_query.format(temp_table_name, OPENSTATES_SCHEMA))
 
+    # Create a string buffer
     buffer = StringIO()
+
+    # Given list of bills fetched from OpenStates, write to buffer
     bills.to_csv(buffer, index=False, header=False, sep='\t', quoting=csv.QUOTE_NONE)
     buffer.seek(0)
+    
+    # Bulk insert from buffer to temp table 
     cur.copy_from(file=buffer, table=temp_table_name, sep='\t', columns=BILL_COLUMNS)
 
+    # Insert new rows to bill table from temp and update existing rows with temp values
     update_bills_query = """
         INSERT INTO {0}.bill
         SELECT *
@@ -52,8 +82,15 @@ def openstates_upsert_bills(cur, bills):
     cur.execute(update_bills_query.format(OPENSTATES_SCHEMA, temp_table_name))
 
 
-# Deletes existing and inserts all actions, sponsors, and votes for the specified list of openstates bill ids
 def openstates_update_bill_data(cur, bill_list=[], bill_actions=[], bill_sponsors=[], bill_votes=[]):
+    """
+    Input: psycopg2 cursor, list of bill IDs, bill actions, bill sponsors, bill votes
+    Output: None (creates temporary CSV and executes SQL queries)
+
+    Deletes existing and inserts all actions, sponsors, and votes in Openstates structure for the specified
+    list of bill IDs. Creates temporary tables which are filled from CSV (via buffer), then updates live tables
+    with temporary tables. 
+    """
     # Table names
     bill_action = 'bill_action'
     bill_sponsor = 'bill_sponsor'
@@ -104,6 +141,12 @@ def get_buffer(df):
 
 # Updates main legtracker tables with new openstates data
 def legtracker_update(cur, updated_since, force_update=False):
+    """
+    Input: psycopg2 cursor, timestamp, forced update flag value
+    Output: None (updates live front-end tables)
+
+    Updates front-end tables bill, bill_history, chamber_vote_results with new Openstates data.
+    """
 
     ### QUERIES ###
 
@@ -111,6 +154,7 @@ def legtracker_update(cur, updated_since, force_update=False):
     truncate_query = 'TRUNCATE TABLE {0}.{1}'
 
     # Count query before upsert
+    # JOIN clause selects bill_sponsor rows with valid authorship types and coalesces possible columns for names
     count_query = """
         SELECT COUNT(*)
         FROM {0}.bill
@@ -130,9 +174,12 @@ def legtracker_update(cur, updated_since, force_update=False):
         ) a2 USING(openstates_bill_id)
         WHERE updated_at > '{1}'
     """
-    # count_query = "SELECT COUNT(openstates_bill_id) FROM {0}.bill WHERE updated_at > '{1}'"
-
      # Upsert query for bill table
+     # INSERT clause selects columns from LEGTRACKER.bill to update
+     # SELECT clause maps OPENSTATES_SCHEMA.bill column names to LEGTRACKER.bill and generates leginfo URL from template
+     # JOIN clause normalizes sponsor/author names
+     # WHERE clause selects by last-updated date timestamp
+     # ON CONFLICT clause chooses selected content to overwrite existing rows when in conflict
     bill_query = """
         INSERT INTO {0}.bill (
             openstates_bill_id
@@ -188,6 +235,10 @@ def legtracker_update(cur, updated_since, force_update=False):
     """
 
     # Rebuild bill history table query
+    # INSERT clause selects columns from LEGTRACKER.bill_history to update
+    # SELECT clause maps columns from OPENSTATES_SCHEMA.bill_action
+    # JOIN clause concatenates OPENSTATES_SCHEMA.bill data to selection
+    # JOIN clause concatenates LEGTRACKER.bill data to selection to index on internal bill_id
     bill_history_query = """
         INSERT INTO {0}.bill_history (
             bill_id
@@ -209,6 +260,11 @@ def legtracker_update(cur, updated_since, force_update=False):
     """
 
     # Rebuild vote result table query
+    # INSERT clause selects columns to update
+    # SELECT clause selects columns from OPENSTATES_SCHEMA.bill_vote
+    # JOIN clause concatenates bill data from OPENSTATES_SCHEMA.bill
+    # JOIN clause concatenates bill data from LEGTRACKER.bill ??
+    # JOIN clause concatenates chamber data from LEGTRACKER.chamber
     bill_vote_query = """
         INSERT INTO {0}.chamber_vote_result(
             vote_date
@@ -237,20 +293,24 @@ def legtracker_update(cur, updated_since, force_update=False):
     """
 
     ### RUN UPDATES ###
+
+    # Set default value for timestamp
     stamp = updated_since
-    # Upsert changes into bill table
+    
+    # Update timestamp if forced update flag is TRUE
     if force_update:
         print("Force update enabled. Initiating forced refresh of legtracker from snapshot...")
-        stamp = LAST_UPDATED_DEFAULT
-        
+        stamp = LAST_UPDATED_DEFAULT    
     else:
         print("Normal update. Applying changes since last update...")
 
+    # Upsert changes into bill table
     cur.execute(count_query.format(OPENSTATES_SCHEMA, stamp))
     count_result = cur.fetchone()
     snapshot_count = count_result[0]
     print("Retrieved {0} rows from Openstates snapshot...".format(snapshot_count))
     cur.execute(bill_query.format(LEGTRACKER_SCHEMA, OPENSTATES_SCHEMA, stamp))
+    
     # Clear and rebuild bill history and votes tables
     cur.execute(truncate_query.format(LEGTRACKER_SCHEMA, 'bill_history'))
     cur.execute(truncate_query.format(LEGTRACKER_SCHEMA, 'chamber_vote_result'))
@@ -258,8 +318,14 @@ def legtracker_update(cur, updated_since, force_update=False):
     cur.execute(bill_vote_query.format(LEGTRACKER_SCHEMA, OPENSTATES_SCHEMA))
 
 
-# Retrieves a timestamp of the most recently updated bill
+
 def get_last_update_timestamp(cur):
+    """
+    Input: psycopg2 cursor
+    Output: timestamp string
+
+    Retrieves a timestamp of the most recently updated bill, or default value
+    """
     query = 'SELECT MAX(updated_at) FROM {0}.bill'
 
     cur.execute(query.format(OPENSTATES_SCHEMA))
@@ -271,8 +337,13 @@ def get_last_update_timestamp(cur):
     return last_updated
 
 
-# Fetch arrays of bill and bill actions/sponsors/votes since last update
 def fetch_bill_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_page=1):
+    """
+    Input: timestamp, max page number, start page number
+    Output: dictionary from string keys to DataFrame values
+
+    Fetch arrays of bill and bill actions/sponsors/votes since last update
+    """
     df_bills = pd.DataFrame(columns=BILL_COLUMNS)
     df_bill_actions = pd.DataFrame(columns=BILL_ACTION_COLUMNS)
     df_bill_sponsors = pd.DataFrame(columns=BILL_SPONSOR_COLUMNS)
@@ -283,7 +354,7 @@ def fetch_bill_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_
 
     while current_page < num_pages and current_page < max_page:
         current_page = current_page + 1
-
+        # Imported function from fetching scripts
         data, num_pages = openstates.get_bill_data(page=current_page, updated_since=updated_since)
         print('Finished fetching page ' + str(current_page) + ' of ' + str(num_pages) + ' of bill updates')
 
@@ -301,7 +372,7 @@ def fetch_bill_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_
 
 
 def main():
-    # argument parser
+    # argument parser detects optional flags
     parser = argparse.ArgumentParser(description="Take new snapshot of OpenStates data and wrangle into legislation tracker.")
     parser.add_argument('--force-update', action='store_true', help='Force update on front-end schema without date filtering.')
     args = parser.parse_args()
@@ -325,20 +396,29 @@ def main():
 
         print('Summary of bills being updated:')
 
-
+        # Empty OpenStates response case
         if len(bill_updates['bills'].index) == 0:
             print("Empty response from Openstates API.")
-            if args.force_update:
+
+            # If flag is activated, re-sync DB schemas regardless of update
+            if args.force_update: 
                 legtracker_update(cur, last_update, force_update=args.force_update)
             else:
                 print("Skipping forced refresh -- no bills to update; finishing.")
         else:
+
+            # Logs new bills to console
             print(bill_updates['bills'])
             print("Openstates response received. Updating Openstates snapshot...")
+
+            # Upserts new bills and new bill content into Openstates/snapshot schema
             openstates_upsert_bills(cur, bill_updates['bills'])
+            
+            # Updates bill actions, sponsors, votes from Openstates response
             openstates_update_bill_data(cur=cur, bill_list=bill_updates['bills']['openstates_bill_id'], bill_actions=bill_updates['bill_actions'], bill_sponsors=bill_updates['bill_sponsors'], bill_votes=bill_updates['bill_votes'])
-            # update bill, bill_history, and chamber_vote_result tables
             print('Snapshot updated')
+
+            # Updates bill, bill_history, and chamber_vote_result tables
             print('Updating legtracker tables')
             legtracker_update(cur, last_update, force_update=args.force_update)
         conn.commit()

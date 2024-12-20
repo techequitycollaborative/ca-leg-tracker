@@ -1,3 +1,24 @@
+"""
+This scraper pulls content from the CA State Senate's Daily File page and parses relevant events for legislation tracking.
+
+Input: URL for Senate Calendar page (already set as default input)
+Output: set of tuples (EVENT_DATE, EVENT_TEXT, BILL_NUMBER) where EVENT_TEXT is a floor action or commitee
+hearing description. 
+
+First, the page is manipulated using Playwright as a quick/dirty solution to rendering relevant event agendas
+by simulating user page navigation. 
+
+Once the HTML content is manipulated into the desired state, the contents are parsed by BeautifulSoup so we can extract 
+elements marked as Daily File section items. For the floor session, we extract the element header which should contain the 
+current date to enumerate against all floor actions and associated bills/measures. To do so, we need to iterate over all
+action subsections (ex: 'First Reading'), which act as event descriptions, and extract a list of bills in that subsection. 
+
+For the committee hearings, we use the committee hearing agenda title as an event description, extract the specified date
+from the preceding h5 element, and a list of bills within this hearing subsection.
+
+For both the floor action and committee hearing sections, we pass the event date, event text/description, and the list of
+bills into a utils function, which returns a set of tuples in the shape (DATE, EVENT_TEXT, BILL_NUMBER).
+"""
 from bs4 import BeautifulSoup as bs
 import datetime
 from playwright.sync_api import sync_playwright

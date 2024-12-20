@@ -1,3 +1,8 @@
+"""
+Parameters and functions that directly fetch from Openstates via GET requests. 
+
+Called in bill_daily_update.py
+"""
 import json
 from config import config
 from time import sleep
@@ -22,6 +27,10 @@ BASE_PARAMS = {
 
 
 def process_bill_json(data, last_update):
+    """
+    Input: JSON data, update timestamp
+    Output: dictionary of strings mapped to nested lists
+    """
     bills = []
     bill_actions = []
     bill_sponsors = []
@@ -118,6 +127,13 @@ def process_bill_json(data, last_update):
 
 
 def fetch_bill_batch(page, updated_since):
+    """
+    Input: page number, timestamp
+    Output: JSON API response, max page number
+
+    Update API request parameters with page number and timestamp value (optional), and execute GET request
+    """
+    # Sleep to avoid timeout errors
     sleep(WAIT_TIME)
 
     params = BASE_PARAMS
@@ -133,7 +149,17 @@ def fetch_bill_batch(page, updated_since):
 
 
 def get_bill_data(page=1, updated_since=None):
+    """
+    Input: page number, timestamp
+    Output: dictionary of string keys mapped to lists of data, max page number value
+
+    Fetches data batch for a response page, parses into Python lists, and a max page value for downstream logic
+    """
+
+    # Fetch data for a specified API response page
     data, num_pages = fetch_bill_batch(page, updated_since)
+
+    # Return JSON of processed bills
     return process_bill_json(data, updated_since), num_pages
 
 

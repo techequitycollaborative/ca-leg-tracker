@@ -1,3 +1,11 @@
+"""
+Input: None
+Output: None (manipulates postgreSQL database)
+
+Initialize a postgreSQL database with the schemas, tables, views, and permissions for v1 legislation tracker tool.
+Reads relevant SQL files from the database-scripts folder, replaces placeholder strings with configured schema names, and extracts
+active commands (ignoring commented lines).
+"""
 from config import config
 import psycopg2
 

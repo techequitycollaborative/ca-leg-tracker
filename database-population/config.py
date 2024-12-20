@@ -1,3 +1,9 @@
+"""
+Input: section string, credentials.ini
+Output: string values
+
+Given a section string (ex: postgres), return parameters
+"""
 from configparser import ConfigParser
 
 

@@ -1,3 +1,10 @@
+"""
+Connects to postgreSQL database, stages and inserts new rows to upcoming events for CA Senate and State Assembly.
+
+After pruning events in the past from the bill_schedule table, stage new events in a temporary table. Join these rows
+on their internal bill_id (and filter these rows out if a bill_id cannot be found). Insert these verified rows into
+the live bill_schedule table and remove all staging tables.
+"""
 import assembly_dailyfile_scraper as assembly
 import senate_dailyfile_scraper as senate
 import pandas as pd
