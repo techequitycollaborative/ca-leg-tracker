@@ -17,7 +17,7 @@ ENDPOINTS = {
 WAIT_TIME = 10 # openstates has a rate limit of 6 requests/minute
 BASE_PARAMS = {
     'jurisdiction': 'California',
-    'session': '20232024',
+    'session': '20252026',
     'sort': 'updated_asc', # only usable option, unfortunately this could lead to skipped rows if updates happen during sync
     'per_page': 20, # max allowed by openstates
     'apikey': config('openstates')['api_key'],
