@@ -25,12 +25,16 @@ from playwright.sync_api import sync_playwright
 import scraper_utils
 
 def scrape_dailyfile(
-        source_url="https://www.senate.ca.gov/calendar"
+        source_url="https://www.senate.ca.gov/calendar",
+        verbose=False
 ):
     start_date = datetime.date.today()
     end_date = start_date + datetime.timedelta(days=30)
     query_url = source_url + "?startDate=" + start_date.strftime("%Y-%m-%d") + "&endDate=" + end_date.strftime("%Y-%m-%d") + "&floorMeetings=1&committeeHearings=1"
-    
+    if verbose:
+        print("Querying for events from {} to {}".format(start_date, end_date))
+        print(query_url)
+
     floor_session_results = set()
     committee_hearing_results = set()
 
@@ -41,6 +45,8 @@ def scrape_dailyfile(
 
         # iterate over date wrapper blocks
         page.wait_for_selector("div.page-events--day-wrapper")
+        if verbose:
+            print("Found events by date")
         wrappers = page.locator("div.page-events--day-wrapper")
         wrapper_count = wrappers.count()
 
@@ -48,19 +54,25 @@ def scrape_dailyfile(
             # Extract current date
             current_wrapper = wrappers.nth(i)
             current_date = scraper_utils.text_to_date_string(current_wrapper.locator("h2.page-events__date").first.inner_text())
-
+            if verbose:
+                print("Extracting {}".format(current_date))
             # Detect empty content
             empty_wrapper = page.locator("div.no-results-message")
 
             if empty_wrapper.count() > 0:
                 print(f"No events scheduled for {current_date}")
             else:
+                if verbose:
+                    print("Looking for events...")
                 #TODO: Examine floor session content
+                # floor_section = current_wrapper.locator("div.dailyfile-section.floor-meetings")
+                # floor_elements = floor_section.locator("div.page-events__item.page-events__item--floor-meetings")
                             
                 # Examine committee hearing content
                 committee_hearing_section = current_wrapper.locator("div.dailyfile-section.committee-hearings")
                 hearing_elements = committee_hearing_section.locator("div.page-events__item.page-events__item--committee-hearing")
-
+                if verbose:
+                    print("Found {} hearings...".format(hearing_elements.count()))    
                 # Iterate over individual hearings
                 for j in range(hearing_elements.count()):
                     current_hearing = hearing_elements.nth(j)
@@ -68,13 +80,14 @@ def scrape_dailyfile(
                     current_agenda = current_hearing.get_by_role("link", name="View Agenda")
                     scraper_utils.view_agenda(page, current_agenda)
 
-                    # Extract agenda content
-                    page.wait_for_selector("div.ui-dialog.ui-corner-all.ui-widget.ui-widget-content.ui-front.event-agenda-modal")
-                    content = page.locator("div.ui-dialog.ui-corner-all.ui-widget.ui-widget-content.ui-front.event-agenda-modal").inner_html()
+                    # Extract HTML and parse as BeautifulSoup object
+                    content = page.content()
                     soup = bs(content, 'html.parser')
-
                     # Extract measures
-                    committee_hearing_results = committee_hearing_results | scraper_utils.collect_measures(current_date, current_name, soup.select("span.measureLink"))
+                    measure_selector = soup.select("span.measureLink")
+                    if verbose:
+                        print("Found {} measures...".format(len(measure_selector)))
+                    committee_hearing_results = committee_hearing_results | scraper_utils.collect_measures(current_date, current_name, measure_selector)
 
                     # Close agenda pop-up
                     close_button = page.get_by_role("button", name="Close").first
@@ -85,6 +98,7 @@ def scrape_dailyfile(
 
 def main():
     scrape_dailyfile()
+    # scrape_dailyfile(verbose=True)
 
 if __name__ == "__main__":
     main()
