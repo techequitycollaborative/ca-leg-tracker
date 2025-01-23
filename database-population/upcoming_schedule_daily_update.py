@@ -92,6 +92,7 @@ def remove_staging_table(cur):
     """
     cur.execute(drop_query.format("new_bill_schedule"))
     cur.execute(drop_query.format("new_bill_schedule_with_ids"))
+    cur.execute(drop_query.format("existing_bill_schedule"))
     return
 
 def legtracker_update(cur, schedule_data):
