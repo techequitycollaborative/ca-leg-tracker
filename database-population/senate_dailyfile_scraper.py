@@ -64,9 +64,29 @@ def scrape_dailyfile(
             else:
                 if verbose:
                     print("Looking for events...")
-                #TODO: Examine floor session content
-                # floor_section = current_wrapper.locator("div.dailyfile-section.floor-meetings")
-                # floor_elements = floor_section.locator("div.page-events__item.page-events__item--floor-meetings")
+                # Examine floor session content
+                floor_section = current_wrapper.locator("div.dailyfile-section.floor-meetings").first # Assuming Senate DF is only updated day-of
+                scheduled = not floor_section.get_by_text("No floor session scheduled.").is_visible()
+
+                if scheduled:
+                    floor_agenda = floor_section.get_by_role("link", name="View Agenda").first # Assuming we only need first link
+                    scraper_utils.view_agenda(page, floor_agenda)
+
+                    agenda_found = not page.get_by_text("No Agendas were found.").is_visible()
+
+                    if agenda_found:
+                        # Extract HTML and parse as BeautifulSoup object
+                        content = page.content()
+                        soup = bs(content, 'html.parser')
+                        floor_content = soup.select_one('div.agenda-container')
+                        # Parse agenda into actions
+                        floor_actions = floor_content.select('h3')
+                        for a in floor_actions:
+
+                            # Extract measures AKA bills to be covered in the floor session and union with existing results
+                            measures = a.find_next_sibling("div", class_="agenda-item").select("span.measureLink")
+                            # Update results with set intersection operation on a set of collected bills/measures
+                            floor_session_results = floor_session_results | scraper_utils.collect_measures(current_date, a.text.title(), measures)
                             
                 # Examine committee hearing content
                 committee_hearing_section = current_wrapper.locator("div.dailyfile-section.committee-hearings")
