@@ -16,6 +16,7 @@ from datetime import datetime
 from io import StringIO
 import csv
 import people_openstates_fetch as people
+from text_utils import transform_name
 
 # Index into credentials.ini for DB schema names
 OPENSTATES_SCHEMA = config('postgresql_schemas')['openstates_schema']
@@ -44,34 +45,33 @@ def legtracker_update(cur, updated_since, force_update=False):
         WHERE updated_at > '{1}'
     """
 
-    people_query = """
-        INSERT INTO {0}.legislator
-         (
-            openstates_people_id
-            , chamber_id
-            , name
-            , district
-            , party
-        )
+    fetch_query = """
         SELECT p.openstates_people_id
             , CASE WHEN pr.org_classification = 'lower' THEN 1 ELSE 2 END AS chamber_id
             , p.name AS name
             , pr.district AS district
             , p.party as PARTY
-        FROM {1}.people p
+        FROM {0}.people p
         JOIN (
             SELECT openstates_people_id
                 , org_classification
                 , district
-            FROM {1}.people_roles 
+            FROM {0}.people_roles 
         ) pr ON p.openstates_people_id = pr.openstates_people_id
-        WHERE p.updated_at > '{2}'
+        WHERE p.updated_at > '{1}'
+    """
+
+    insert_query = """
+        INSERT INTO {0}.legislator
+        (openstates_people_id, chamber_id, name, district, party)
+        VALUES (%s, %s, %s, %s, %s)
         ON CONFLICT (openstates_people_id) DO UPDATE SET
             chamber_id = EXCLUDED.chamber_id,
             name = EXCLUDED.name,
             district = EXCLUDED.district,
             party = EXCLUDED.party
     """
+
     stamp = updated_since
 
     if force_update:
@@ -84,8 +84,22 @@ def legtracker_update(cur, updated_since, force_update=False):
     count_result = cur.fetchone()
     snapshot_count = count_result[0]
     print("Retrieved {0} rows from Openstates snapshot...".format(snapshot_count))
+    
+    # Truncate the legislator table
     cur.execute(truncate_query.format(LEGTRACKER_SCHEMA, 'legislator'))
-    cur.execute(people_query.format(LEGTRACKER_SCHEMA, OPENSTATES_SCHEMA, stamp))
+
+    # Fetch the data from the snapshot schema
+    cur.execute(fetch_query.format(OPENSTATES_SCHEMA, stamp))
+    rows = cur.fetchall()
+
+    # Insert the transformed data into the legislator table
+    for row in rows:
+        openstates_people_id, chamber_id, name, district, party = row
+        transformed_name = transform_name(name)  # Apply the transformation
+        cur.execute(insert_query.format(LEGTRACKER_SCHEMA),
+                   (openstates_people_id, chamber_id, transformed_name, district, party))
+
+    print("Update completed successfully.")
 
 def openstates_upsert_people(cur, people):
     temp_table_name = 'people_temp'
