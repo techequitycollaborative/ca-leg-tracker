@@ -75,7 +75,7 @@ def fetch_assembly_batch(page, updated_since):
     # Sleep to avoid timeout errors
     sleep(WAIT_TIME)
 
-    params = BASE_PARAMS | ASSEMBLY_PARAMS
+    params = {**BASE_PARAMS, **ASSEMBLY_PARAMS}
     params['page'] = page
 
     if updated_since != None:
@@ -94,7 +94,7 @@ def fetch_senate_batch(page, updated_since):
     # Sleep to avoid timeout errors
     sleep(WAIT_TIME)
 
-    params = BASE_PARAMS | SENATE_PARAMS
+    params = {**BASE_PARAMS, **SENATE_PARAMS}
     params['page'] = page
 
     if updated_since != None:
@@ -122,6 +122,7 @@ def get_senate_data(page=1, updated_since=None):
     return process_legislator_json(senate_data, updated_since), num_pages
 
 def main():
+    get_senate_data()
     return
 
 if __name__ == "__main__":
