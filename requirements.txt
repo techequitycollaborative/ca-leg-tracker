@@ -6,3 +6,5 @@ PyJWT
 bs4
 python-dateutil
 psycopg2
+pandas
+requests
