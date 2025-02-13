@@ -45,7 +45,7 @@ def legtracker_update(cur, updated_since, force_update=False):
     """
 
     people_query = """
-        INSERT INTO {0}.test_legislator
+        INSERT INTO {0}.legislator
          (
             openstates_people_id
             , chamber_id
@@ -84,7 +84,7 @@ def legtracker_update(cur, updated_since, force_update=False):
     count_result = cur.fetchone()
     snapshot_count = count_result[0]
     print("Retrieved {0} rows from Openstates snapshot...".format(snapshot_count))
-    cur.execute(truncate_query.format(LEGTRACKER_SCHEMA, 'test_legislator'))
+    cur.execute(truncate_query.format(LEGTRACKER_SCHEMA, 'legislator'))
     cur.execute(people_query.format(LEGTRACKER_SCHEMA, OPENSTATES_SCHEMA, stamp))
 
 def openstates_upsert_people(cur, people):
