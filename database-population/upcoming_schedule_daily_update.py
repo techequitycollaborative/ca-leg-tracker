@@ -12,9 +12,9 @@ from config import config
 import psycopg2
 
 LEGTRACKER_SCHEMA = config('postgresql_schemas')['legtracker_schema']
-BILL_SCHEDULE_COLUMNS = ['bill_schedule_id', 'bill_id', 'event_date', 'event_text']
+BILL_SCHEDULE_COLUMNS = ['bill_schedule_id', 'bill_id', 'chamber_id', 'event_date', 'event_text']
 SNAPSHOT_SCHEMA = config('postgresql_schemas')['snapshot_schema'] 
-
+CURRENT_SESSION = '20252026'
 
 def prune_bill_schedule(cur):
     # Create staging table for events that are still upcoming
@@ -26,7 +26,7 @@ def prune_bill_schedule(cur):
         WHERE event_date >= CURRENT_DATE;
     """
     cur.execute(temp_table_query.format(temp_table_name, LEGTRACKER_SCHEMA))
-    
+
     # Truncate query
     truncate_query = 'TRUNCATE TABLE {0}.{1}'
     # Truncate bill_schedule
@@ -38,22 +38,33 @@ def stage_new_schedule(cur, schedule_data):
     temp_table_name = "new_bill_schedule"
     temp_table_query = """
         CREATE TEMPORARY TABLE {0} (
+        chamber_id INT,
         bill_number TEXT,
         event_date DATE,
         event_text TEXT
         );
     """
     cur.execute(temp_table_query.format(temp_table_name))
+    print("Staging table created...")
 
     # Insert data into staging table
     insert_query = """
-        INSERT INTO {0} (event_date, event_text, bill_number)
-        VALUES (%s::DATE, %s, %s)
+        INSERT INTO {0} (chamber_id, event_date, event_text, bill_number)
+        VALUES (%s, %s::DATE, %s, %s)
+    """
+
+    count_query = """
+        SELECT COUNT(*) FROM {0};
     """
 
     # Execute the insert query for each row in the schedule_data
     for row in schedule_data:
-        cur.execute(insert_query.format(temp_table_name), (row[0], row[1], row[2]))
+        cur.execute(insert_query.format(temp_table_name), (row[0], row[1], row[2], row[3]))
+    print("New events staged...")
+
+    cur.execute(count_query.format(temp_table_name))
+    row_count = cur.fetchone()[0]
+    print(f"Number of rows inserted into {temp_table_name}: {row_count}")
     return
 
 def join_filter_ids(cur):
@@ -61,28 +72,37 @@ def join_filter_ids(cur):
     temp_table_name = "new_bill_schedule_with_ids"
     temp_table_query = """
         CREATE TABLE {0} AS
-        SELECT nbs.event_date, nbs.event_text, b.bill_id
+        SELECT nbs.chamber_id, b.bill_id, nbs.event_date, nbs.event_text
         FROM new_bill_schedule nbs
         JOIN {1}.bill b ON nbs.bill_number = b.bill_number
+        AND b.leg_session = '{2}'
         WHERE b.bill_id IS NOT NULL;
     """
-    cur.execute(temp_table_query.format(temp_table_name, LEGTRACKER_SCHEMA))
+
+    # Query to count rows where bill_id is NULL
+    count_query = """
+        SELECT COUNT(*)
+        FROM {0}
+    """
+
+    cur.execute(temp_table_query.format(temp_table_name, LEGTRACKER_SCHEMA, CURRENT_SESSION))
+    cur.execute(count_query.format(temp_table_name))
+    bill_id_count = cur.fetchone()[0]
+    print(f"Number of rows staged with bill IDs: {bill_id_count}")
     return
 
 def insert_new_schedule(cur):
-    # Insert data into bill_schedule
+    # Insert data into bill_schedule and update event text with newer data on conflict
     insert_query = """
-        INSERT INTO {0}.bill_schedule (bill_id, event_date, event_text)
-        SELECT sw.bill_id, sw.event_date, sw.event_text
+        INSERT INTO {0}.bill_schedule (bill_id, chamber_id, event_date, event_text)
+        SELECT sw.bill_id, sw.chamber_id, sw.event_date, sw.event_text
         FROM new_bill_schedule_with_ids sw
-        WHERE NOT EXISTS (
-            SELECT 1 FROM {0}.bill_schedule bs 
-            WHERE bs.bill_id = sw.bill_id
-            AND bs.event_date = sw.event_date
-            AND bs.event_text = sw.event_text
-            );
+        ON CONFLICT (bill_id, chamber_id, event_date)
+        DO UPDATE SET
+            event_text = EXCLUDED.event_text;
     """
     cur.execute(insert_query.format(LEGTRACKER_SCHEMA))
+    print("New events inserted...")
     return
 
 def remove_staging_table(cur):
@@ -93,6 +113,7 @@ def remove_staging_table(cur):
     cur.execute(drop_query.format("new_bill_schedule"))
     cur.execute(drop_query.format("new_bill_schedule_with_ids"))
     cur.execute(drop_query.format("existing_bill_schedule"))
+    print("Dropped staging tables...")
     return
 
 def legtracker_update(cur, schedule_data):
@@ -106,7 +127,12 @@ def legtracker_update(cur, schedule_data):
 def fetch_schedule_update():
     assembly_update = assembly.scrape_dailyfile()
     senate_update = senate.scrape_dailyfile()
-    return assembly_update, senate_update
+
+    print(f'{len(assembly_update)} upcoming Assembly events')
+    print(f'{len(senate_update)} upcoming Senate events')
+    
+    # join sets before returning
+    return assembly_update | senate_update
 
 
 def main():
@@ -121,25 +147,14 @@ def main():
         # create a cursor
         cur = conn.cursor()
 
-        schedule_updates = fetch_schedule_update()
-
         print('Summary of schedules being updated:')
-        print(f'{len(schedule_updates[0])} upcoming Assembly events')
-        print(f'{len(schedule_updates[1])} upcoming Senate events')
-
-        if len(schedule_updates[0]) > 0:
-            # update bill_schedule table
-            print('Updating Assembly schedule in legtracker')
-            legtracker_update(cur, schedule_updates[0])
-        else:
-            print('No Assembly schedule updates; finishing')
+        schedule_updates = fetch_schedule_update()
         
-        if len(schedule_updates[1]) > 0:
-            # update bill_schedule table
-            print('Updating Senate schedule in legtracker')
-            legtracker_update(cur, schedule_updates[1])
+        if len(schedule_updates):
+            print('Updating bill schedule for both chambers...')
+            legtracker_update(cur, schedule_updates)
         else:
-            print('No Senate schedule updates; finishing')
+            print('No schedule updates; finishing')
 
         conn.commit()
 
