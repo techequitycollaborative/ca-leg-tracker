@@ -86,7 +86,10 @@ def scrape_dailyfile(
                             # Extract measures AKA bills to be covered in the floor session and union with existing results
                             measures = a.find_next_sibling("div", class_="agenda-item").select("span.measureLink")
                             # Update results with set intersection operation on a set of collected bills/measures
-                            floor_session_results = floor_session_results | scraper_utils.collect_measures(current_date, a.text.title(), measures)
+                            floor_session_results = floor_session_results | scraper_utils.collect_measures(current_date, a.text.title(), measures, 2)
+                    # Close agenda pop-up
+                    close_button = page.get_by_role("button", name="Close").first
+                    close_button.click()
                             
                 # Examine committee hearing content
                 committee_hearing_section = current_wrapper.locator("div.dailyfile-section.committee-hearings")
@@ -107,7 +110,7 @@ def scrape_dailyfile(
                     measure_selector = soup.select("span.measureLink")
                     if verbose:
                         print("Found {} measures...".format(len(measure_selector)))
-                    committee_hearing_results = committee_hearing_results | scraper_utils.collect_measures(current_date, current_name, measure_selector)
+                    committee_hearing_results = committee_hearing_results | scraper_utils.collect_measures(current_date, current_name, measure_selector, 2)
 
                     # Close agenda pop-up
                     close_button = page.get_by_role("button", name="Close").first
