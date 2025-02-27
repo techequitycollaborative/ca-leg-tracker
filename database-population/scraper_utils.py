@@ -40,14 +40,14 @@ def normalize_bill_number(text):
     """
     return text.replace("No.", "").replace(".", "").strip()
 
-def collect_measures(event_date, event_description, sel):
+def collect_measures(event_date, event_description, sel, chamber_id):
     """
-    Input: date string, event description, list of selected measure HTML elements
-    Output: set of tuples (EVENT_DATE, EVENT_TEXT, BILL_NUM)
+    Input: date string, event description, list of selected measure HTML elements, chamber ID
+    Output: set of tuples (CHAMBER_ID, EVENT_DATE, EVENT_TEXT, BILL_NUM)
     """
     results = set()
     for measure in sel:
-        results.add((event_date, event_description, normalize_bill_number(measure.text)))
+        results.add((chamber_id, event_date, event_description, normalize_bill_number(measure.text)))
     return results
 
 def view_agenda(page, link):
