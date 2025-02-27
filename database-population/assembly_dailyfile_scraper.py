@@ -66,7 +66,7 @@ def scrape_dailyfile(
                         measures = a.find_next_sibling("div", class_="agenda-item").select("span.measureLink")
                         
                         # Update results with set intersection operation on a set of collected bills/measures
-                        floor_session_results = floor_session_results | scraper_utils.collect_measures(floor_date, a.text.title(), measures)
+                        floor_session_results = floor_session_results | scraper_utils.collect_measures(floor_date, a.text.title(), measures, 1)
 
             else: # Committee hearing data is preloaded, no simulated clicks/fetching needed
                 
@@ -86,7 +86,7 @@ def scrape_dailyfile(
                     measures = agenda.select('span.measureLink')
 
                     # Update results with set intersection operation on a set of collected bills/measures
-                    committee_hearing_results = committee_hearing_results | scraper_utils.collect_measures(hearing_date, hearing_description, measures)
+                    committee_hearing_results = committee_hearing_results | scraper_utils.collect_measures(hearing_date, hearing_description, measures, 1)
         # Close Playwright handler
         browser.close()
     
