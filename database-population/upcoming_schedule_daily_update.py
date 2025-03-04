@@ -5,16 +5,24 @@ After pruning events in the past from the bill_schedule table, stage new events 
 on their internal bill_id (and filter these rows out if a bill_id cannot be found). Insert these verified rows into
 the live bill_schedule table and remove all staging tables.
 """
+
 import assembly_dailyfile_scraper as assembly
 import senate_dailyfile_scraper as senate
 import pandas as pd
 from config import config
 import psycopg2
 
-LEGTRACKER_SCHEMA = config('postgresql_schemas')['legtracker_schema']
-BILL_SCHEDULE_COLUMNS = ['bill_schedule_id', 'bill_id', 'chamber_id', 'event_date', 'event_text']
-SNAPSHOT_SCHEMA = config('postgresql_schemas')['snapshot_schema'] 
-CURRENT_SESSION = '20252026'
+LEGTRACKER_SCHEMA = config("postgresql_schemas")["legtracker_schema"]
+BILL_SCHEDULE_COLUMNS = [
+    "bill_schedule_id",
+    "bill_id",
+    "chamber_id",
+    "event_date",
+    "event_text",
+]
+SNAPSHOT_SCHEMA = config("postgresql_schemas")["snapshot_schema"]
+CURRENT_SESSION = "20252026"
+
 
 def prune_bill_schedule(cur):
     # Create staging table for events that are still upcoming
@@ -28,10 +36,11 @@ def prune_bill_schedule(cur):
     cur.execute(temp_table_query.format(temp_table_name, LEGTRACKER_SCHEMA))
 
     # Truncate query
-    truncate_query = 'TRUNCATE TABLE {0}.{1}'
+    truncate_query = "TRUNCATE TABLE {0}.{1}"
     # Truncate bill_schedule
     cur.execute(truncate_query.format(LEGTRACKER_SCHEMA, main_table))
     return
+
 
 def stage_new_schedule(cur, schedule_data):
     # Create staging table
@@ -59,13 +68,16 @@ def stage_new_schedule(cur, schedule_data):
 
     # Execute the insert query for each row in the schedule_data
     for row in schedule_data:
-        cur.execute(insert_query.format(temp_table_name), (row[0], row[1], row[2], row[3]))
+        cur.execute(
+            insert_query.format(temp_table_name), (row[0], row[1], row[2], row[3])
+        )
     print("New events staged...")
 
     cur.execute(count_query.format(temp_table_name))
     row_count = cur.fetchone()[0]
     print(f"Number of rows inserted into {temp_table_name}: {row_count}")
     return
+
 
 def join_filter_ids(cur):
     # Join on bill_number and filter if bill_id is not found
@@ -85,11 +97,14 @@ def join_filter_ids(cur):
         FROM {0}
     """
 
-    cur.execute(temp_table_query.format(temp_table_name, LEGTRACKER_SCHEMA, CURRENT_SESSION))
+    cur.execute(
+        temp_table_query.format(temp_table_name, LEGTRACKER_SCHEMA, CURRENT_SESSION)
+    )
     cur.execute(count_query.format(temp_table_name))
     bill_id_count = cur.fetchone()[0]
     print(f"Number of rows staged with bill IDs: {bill_id_count}")
     return
+
 
 def insert_new_schedule(cur):
     # Insert data into bill_schedule and update event text with newer data on conflict
@@ -105,6 +120,7 @@ def insert_new_schedule(cur):
     print("New events inserted...")
     return
 
+
 def remove_staging_table(cur):
     # Remove staging tables
     drop_query = """
@@ -116,6 +132,7 @@ def remove_staging_table(cur):
     print("Dropped staging tables...")
     return
 
+
 def legtracker_update(cur, schedule_data):
     prune_bill_schedule(cur)
     stage_new_schedule(cur, schedule_data)
@@ -124,13 +141,14 @@ def legtracker_update(cur, schedule_data):
     remove_staging_table(cur)
     return
 
+
 def fetch_schedule_update():
     assembly_update = assembly.scrape_dailyfile()
     senate_update = senate.scrape_dailyfile()
 
-    print(f'{len(assembly_update)} upcoming Assembly events')
-    print(f'{len(senate_update)} upcoming Senate events')
-    
+    print(f"{len(assembly_update)} upcoming Assembly events")
+    print(f"{len(senate_update)} upcoming Senate events")
+
     # join sets before returning
     return assembly_update | senate_update
 
@@ -147,14 +165,14 @@ def main():
         # create a cursor
         cur = conn.cursor()
 
-        print('Summary of schedules being updated:')
+        print("Summary of schedules being updated:")
         schedule_updates = fetch_schedule_update()
-        
+
         if len(schedule_updates):
-            print('Updating bill schedule for both chambers...')
+            print("Updating bill schedule for both chambers...")
             legtracker_update(cur, schedule_updates)
         else:
-            print('No schedule updates; finishing')
+            print("No schedule updates; finishing")
 
         conn.commit()
 
@@ -163,9 +181,9 @@ def main():
     finally:
         if conn is not None:
             conn.close()
-            print('Database connection closed')
+            print("Database connection closed")
 
-    print('Update finished')
+    print("Update finished")
 
 
 if __name__ == "__main__":

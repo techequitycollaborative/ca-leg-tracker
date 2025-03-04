@@ -1,9 +1,11 @@
 """
 General functions for Daily File scraper programs
 """
+
 from bs4 import BeautifulSoup as bs
 from dateutil import parser
 import urllib.request
+
 
 def text_to_date_string(s):
     """
@@ -15,8 +17,9 @@ def text_to_date_string(s):
     try:
         dt = parser.parse(s)
         return dt.strftime("%Y-%m-%d")
-    except ValueError: #TODO: define more helpful behavior
+    except ValueError:  # TODO: define more helpful behavior
         pass
+
 
 def prettify_structure(content):
     """
@@ -25,13 +28,14 @@ def prettify_structure(content):
 
     Function for early scraper development for quick and dirty HTML hierarchical visualization
     """
-    soup = bs(content, 'html.parser')
+    soup = bs(content, "html.parser")
 
     # Prettify the HTML
     pretty_html = soup.prettify()
     print(pretty_html)
-    print('***'*20)
+    print("***" * 20)
     return
+
 
 def normalize_bill_number(text):
     """
@@ -40,6 +44,7 @@ def normalize_bill_number(text):
     """
     return text.replace("No.", "").replace(".", "").strip()
 
+
 def collect_measures(event_date, event_description, sel, chamber_id):
     """
     Input: date string, event description, list of selected measure HTML elements, chamber ID
@@ -47,8 +52,16 @@ def collect_measures(event_date, event_description, sel, chamber_id):
     """
     results = set()
     for measure in sel:
-        results.add((chamber_id, event_date, event_description, normalize_bill_number(measure.text)))
+        results.add(
+            (
+                chamber_id,
+                event_date,
+                event_description,
+                normalize_bill_number(measure.text),
+            )
+        )
     return results
+
 
 def view_agenda(page, link):
     """
@@ -56,14 +69,15 @@ def view_agenda(page, link):
     Output: None (clicks the link)
     """
     try:
-        link.wait_for(state='attached')
+        link.wait_for(state="attached")
         link.click()
-        page.wait_for_timeout(1000) # Wait for content to load
-    except Exception as e: #TODO: define helpful exception behavior
+        page.wait_for_timeout(1000)  # Wait for content to load
+    except Exception as e:  # TODO: define helpful exception behavior
         return e
     return
 
-def make_static_soup(page, tag_pattern, make_request=True): 
+
+def make_static_soup(page, tag_pattern, make_request=True):
     """
     Input: URL string OR request response, HTML tag pattern, optional request flag
     Output: array of selected tags matching the given HTML tag pattern from the generated soup object
@@ -75,5 +89,3 @@ def make_static_soup(page, tag_pattern, make_request=True):
         url = urllib.request.urlopen(page).read()
     soup = bs(url, "html.parser")
     return soup.select(tag_pattern)
-
-
