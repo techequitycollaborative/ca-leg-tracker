@@ -6,19 +6,20 @@ Initialize a postgreSQL database with the schemas, tables, views, and permission
 Reads relevant SQL files from the database-scripts folder, replaces placeholder strings with configured schema names, and extracts
 active commands (ignoring commented lines).
 """
+
 from config import config
 import psycopg2
 
-LEGTRACKER_SCHEMA = config('postgresql_schemas')['legtracker_schema']
-FRONTEND_USER = config('postgresql_schemas')['frontend_user']
-BACKEND_USER = config('postgresql_schemas')['backend_user']
-create_tb_fd = open('../database-scripts/create-tables.sql', 'r')
+LEGTRACKER_SCHEMA = config("postgresql_schemas")["legtracker_schema"]
+FRONTEND_USER = config("postgresql_schemas")["frontend_user"]
+BACKEND_USER = config("postgresql_schemas")["backend_user"]
+create_tb_fd = open("../database-scripts/create-tables.sql", "r")
 create_tb_file = create_tb_fd.read()
 create_tb_fd.close()
-create_view_fd = open('../database-scripts/create-views.sql', 'r')
+create_view_fd = open("../database-scripts/create-views.sql", "r")
 create_view_file = create_view_fd.read()
 create_view_fd.close()
-drop_fd = open('../database-scripts/drop-tables.sql', 'r')
+drop_fd = open("../database-scripts/drop-tables.sql", "r")
 drop_file = drop_fd.read()
 drop_fd.close()
 
@@ -41,9 +42,9 @@ def extract_commands(stream):
 def main():
     conn = None
     command = None
-    drop_commands = extract_commands(drop_file.split(';'))
-    create_tb_commands = extract_commands(create_tb_file.split(';'))
-    create_view_commands = extract_commands(create_view_file.split(';'))
+    drop_commands = extract_commands(drop_file.split(";"))
+    create_tb_commands = extract_commands(create_tb_file.split(";"))
+    create_view_commands = extract_commands(create_view_file.split(";"))
     try:
         # read connection parameters
         params = config("postgresql")
@@ -68,9 +69,9 @@ def main():
     finally:
         if conn is not None:
             conn.close()
-            print('Database connection closed')
+            print("Database connection closed")
 
-    print('Update finished')
+    print("Update finished")
 
 
 if __name__ == "__main__":
