@@ -29,7 +29,8 @@ import scraper_utils
 
 
 def scrape_dailyfile(
-    url="https://www.assembly.ca.gov/schedules-publications/assembly-daily-file",
+    url="https://www.assembly.ca.gov/schedules-publications/assembly-daily-file", 
+    verbose=False
 ):
     # Initialize sets to store tuples of shape (DATE, EVENT_TEXT, BILL_NUMBER)
     floor_session_results = set()
@@ -51,12 +52,18 @@ def scrape_dailyfile(
 
         # Select Daily File section elements to loop over them
         for idx, section in enumerate(soup.select("div.dailyfile-section-item")):
-
+            print(idx)
             if idx == 0:  # Special case for the floor session
                 floor_date = scraper_utils.text_to_date_string(
                     section.select_one("div.header").text
                 )
+
+                if verbose:
+                    print("Extracting floor session for {}.".format(floor_date))
+
                 if "No agendas are found for this event." in section.text:
+                    if verbose:
+                        print("No floor session scheduled, moving on...")
                     continue  # TODO: define better behavior for undetermined agendas that can be more easily parsed downstream
                 else:
                     # Find the full agenda
@@ -86,11 +93,26 @@ def scrape_dailyfile(
                 # Extract event text/description
                 hearing_description = section.select_one("div.header").text.title()
 
+                hearing_time_location = section.select_one("div.body").select_one(".attribute.time-location").text
+
+                try:
+                    hearing_time, hearing_details = hearing_time_location.split(" - ")
+
+                    hearing_location, hearing_room = hearing_details.split(", ")
+                    
+                    print(hearing_time)
+                    print(hearing_location)
+                    print(hearing_room)
+                except:
+                    print("Could not extract details for {}: {}".format(hearing_description, hearing_time_location))
+
                 # Extract event date from the most recent h5 element
                 hearing_date = scraper_utils.text_to_date_string(
                     section.find_previous("h5").text
                 )
-
+                if verbose:
+                    print("Extracting hearing info for {}".format(hearing_date))
+                    
                 # Select agenda content, which is either None or a Soup object
                 agenda = section.select_one(
                     "div.footer div.attribute.agenda-container.hide"
@@ -117,7 +139,7 @@ def scrape_dailyfile(
 
 
 def main():
-    scrape_dailyfile()
+    scrape_dailyfile(verbose=True)
 
 
 if __name__ == "__main__":
