@@ -129,19 +129,19 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                     current_name = (
                         current_hearing.locator("div.hearing-name").inner_text().title()
                     )
-                    print("####" * 10)
-                    print(current_name)
-                    try:
-                        current_details = current_hearing.locator("div.attribute.page-events__time-location").inner_text()
-                        print(current_details)
-                        current_time, current_loc = current_details.split(" - ")
-                        current_time = current_time.replace("Time: ", "")
-                        current_location, current_room = current_loc.split(", ")
-                        print(current_time)
-                        print(current_location)
-                        print(current_room)
-                    except:
-                        print("No time or location details could be extraacted...")
+                    # print("####" * 10)
+                    # print(current_name)
+                    # try:
+                    #     current_details = current_hearing.locator("div.attribute.page-events__time-location").inner_text()
+                    #     print(current_details)
+                    #     current_time, current_loc = current_details.split(" - ")
+                    #     current_time = current_time.replace("Time: ", "")
+                    #     current_location, current_room = current_loc.split(", ")
+                    #     print(current_time)
+                    #     print(current_location)
+                    #     print(current_room)
+                    # except:
+                    #     print("No time or location details could be extraacted...")
 
                     current_agenda = current_hearing.get_by_role(
                         "link", name="View Agenda"
