@@ -95,16 +95,16 @@ def scrape_dailyfile(
 
                 hearing_time_location = section.select_one("div.body").select_one(".attribute.time-location").text
 
-                try:
-                    hearing_time, hearing_details = hearing_time_location.split(" - ")
+                # try:
+                #     hearing_time, hearing_details = hearing_time_location.split(" - ")
 
-                    hearing_location, hearing_room = hearing_details.split(", ")
+                #     hearing_location, hearing_room = hearing_details.split(", ")
                     
-                    print(hearing_time)
-                    print(hearing_location)
-                    print(hearing_room)
-                except:
-                    print("Could not extract details for {}: {}".format(hearing_description, hearing_time_location))
+                #     print(hearing_time)
+                #     print(hearing_location)
+                #     print(hearing_room)
+                # except:
+                #     print("Could not extract details for {}: {}".format(hearing_description, hearing_time_location))
 
                 # Extract event date from the most recent h5 element
                 hearing_date = scraper_utils.text_to_date_string(

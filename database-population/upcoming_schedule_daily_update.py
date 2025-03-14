@@ -6,8 +6,8 @@ on their internal bill_id (and filter these rows out if a bill_id cannot be foun
 the live bill_schedule table and remove all staging tables.
 """
 
-import assembly_dailyfile_scraper as assembly
-import senate_dailyfile_scraper as senate
+import dailyfile_assembly_scraper as assembly
+import dailyfile_senate_scraper as senate
 import pandas as pd
 from config import config
 import psycopg2
