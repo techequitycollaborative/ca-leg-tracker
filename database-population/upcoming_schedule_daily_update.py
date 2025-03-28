@@ -84,7 +84,7 @@ def join_filter_ids(cur):
     temp_table_name = "new_bill_schedule_with_ids"
     temp_table_query = """
         CREATE TABLE {0} AS
-        SELECT nbs.chamber_id, b.bill_id, nbs.event_date, nbs.event_text
+        SELECT nbs.chamber_id, b.bill_id, b.openstates_bill_id, nbs.event_date, nbs.event_text
         FROM new_bill_schedule nbs
         JOIN {1}.bill b ON nbs.bill_number = b.bill_number
         AND b.leg_session = '{2}'
@@ -109,10 +109,10 @@ def join_filter_ids(cur):
 def insert_new_schedule(cur):
     # Insert data into bill_schedule and update event text with newer data on conflict
     insert_query = """
-        INSERT INTO {0}.bill_schedule (bill_id, chamber_id, event_date, event_text)
-        SELECT sw.bill_id, sw.chamber_id, sw.event_date, sw.event_text
+        INSERT INTO {0}.bill_schedule (bill_id, chamber_id, event_date, event_text, openstates_bill_id)
+        SELECT sw.bill_id, sw.chamber_id, sw.event_date, sw.event_text, sw.openstates_bill_id
         FROM new_bill_schedule_with_ids sw
-        ON CONFLICT (bill_id, chamber_id, event_date)
+        ON CONFLICT (openstates_bill_id, chamber_id, event_date)
         DO UPDATE SET
             event_text = EXCLUDED.event_text;
     """
