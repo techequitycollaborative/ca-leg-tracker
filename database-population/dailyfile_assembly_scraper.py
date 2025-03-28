@@ -52,7 +52,6 @@ def scrape_dailyfile(
 
         # Select Daily File section elements to loop over them
         for idx, section in enumerate(soup.select("div.dailyfile-section-item")):
-            print(idx)
             if idx == 0:  # Special case for the floor session
                 floor_date = scraper_utils.text_to_date_string(
                     section.select_one("div.header").text
