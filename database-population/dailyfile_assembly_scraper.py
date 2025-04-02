@@ -38,8 +38,7 @@ def scrape_dailyfile(
 
     # Open playwright handler
     with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
+        browser, page = scraper_utils.make_page(p)
         page.goto(url)
 
         # Find floor session "View Agenda" button and click it to fetch floor session data
