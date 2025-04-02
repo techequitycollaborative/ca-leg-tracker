@@ -39,6 +39,7 @@ BILL_COLUMNS = [
     "first_action_date",
     "last_action_date",
     "abstract",
+    "url"
 ]
 BILL_ACTION_COLUMNS = [
     "openstates_bill_id",
@@ -113,7 +114,8 @@ def openstates_upsert_bills(cur, bills):
             updated_at=EXCLUDED.updated_at,
             first_action_date=EXCLUDED.first_action_date,
             last_action_date=EXCLUDED.last_action_date,
-            abstract=EXCLUDED.abstract
+            abstract=EXCLUDED.abstract,
+            url=EXCLUDED.url
     """
     cur.execute(update_bills_query.format(OPENSTATES_SCHEMA, temp_table_name))
 
@@ -265,7 +267,7 @@ def legtracker_update(cur, updated_since, force_update=False):
             , null AS committee_id
             , null AS status
             , a2.names AS coauthors
-            , CONCAT('https://leginfo.legislature.ca.gov/faces/billTextClient.xhtml?bill_id=202320240',REPLACE(b.bill_num, ' ', '')) AS leginfo_link
+            , b.url AS leginfo_link
             , b.session AS leg_session
         FROM {1}.bill b
         JOIN (
