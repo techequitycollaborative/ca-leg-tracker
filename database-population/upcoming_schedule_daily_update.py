@@ -13,38 +13,56 @@ from config import config
 import psycopg2
 
 LEGTRACKER_SCHEMA = config("postgresql_schemas")["legtracker_schema"]
-BILL_SCHEDULE_COLUMNS = [
-    "bill_schedule_id",
-    "bill_id",
-    "chamber_id",
-    "event_date",
-    "event_text",
-]
 SNAPSHOT_SCHEMA = config("postgresql_schemas")["snapshot_schema"]
 CURRENT_SESSION = "20252026"
 
+# global vars for table names used across stages
+MAIN_TABLE = "bill_schedule"
+STAGE_OLD_TABLE = "stage_old_" + MAIN_TABLE
+STAGE_NEW_TABLE = "stage_new_" + MAIN_TABLE
+STAGE_ID_TABLE = "stage_id_" + MAIN_TABLE
+
+def copy_temp_table(cur, temp_table_name):
+    print("Writing table {} to CSV for review...".format(temp_table_name))
+
+    outputquery = """
+        COPY (SELECT * FROM {}) TO STDOUT WITH CSV HEADER
+    """
+
+    with open('{0}.csv'.format(temp_table_name), 'w+') as f:
+        cur.copy_expert(outputquery.format(temp_table_name), f)
+    return
+
+def count_table_rows(cur, table_name):
+    # Query to count rows where bill_id is NULL
+    count_query = """
+        SELECT COUNT(*)
+        FROM {0}
+    """
+    cur.execute(count_query.format(table_name))
+    row_count = cur.fetchone()[0]
+    return row_count
 
 def prune_bill_schedule(cur):
     # Create staging table for events that are still upcoming
-    main_table = "bill_schedule"
-    temp_table_name = "existing_bill_schedule"
     temp_table_query = """
         CREATE TEMPORARY TABLE {0} AS
-        SELECT * FROM {1}.bill_schedule
+        SELECT * FROM {1}.{2}
         WHERE event_date >= CURRENT_DATE;
     """
-    cur.execute(temp_table_query.format(temp_table_name, LEGTRACKER_SCHEMA))
+    cur.execute(temp_table_query.format(STAGE_OLD_TABLE, LEGTRACKER_SCHEMA, MAIN_TABLE))
 
     # Truncate query
     truncate_query = "TRUNCATE TABLE {0}.{1}"
     # Truncate bill_schedule
-    cur.execute(truncate_query.format(LEGTRACKER_SCHEMA, main_table))
+    cur.execute(truncate_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE))
+
+    # copy_temp_table(cur, temp_table_name)
     return
 
 
 def stage_new_schedule(cur, schedule_data):
     # Create staging table
-    temp_table_name = "new_bill_schedule"
     temp_table_query = """
         CREATE TEMPORARY TABLE {0} (
         chamber_id INT,
@@ -53,7 +71,7 @@ def stage_new_schedule(cur, schedule_data):
         event_text TEXT
         );
     """
-    cur.execute(temp_table_query.format(temp_table_name))
+    cur.execute(temp_table_query.format(STAGE_NEW_TABLE))
     print("Staging table created...")
 
     # Insert data into staging table
@@ -61,62 +79,71 @@ def stage_new_schedule(cur, schedule_data):
         INSERT INTO {0} (chamber_id, event_date, event_text, bill_number)
         VALUES (%s, %s::DATE, %s, %s)
     """
-
-    count_query = """
-        SELECT COUNT(*) FROM {0};
-    """
-
     # Execute the insert query for each row in the schedule_data
     for row in schedule_data:
         cur.execute(
-            insert_query.format(temp_table_name), (row[0], row[1], row[2], row[3])
+            insert_query.format(STAGE_NEW_TABLE), (row[0], row[1], row[2], row[3])
         )
     print("New events staged...")
 
-    cur.execute(count_query.format(temp_table_name))
-    row_count = cur.fetchone()[0]
-    print(f"Number of rows inserted into {temp_table_name}: {row_count}")
+    row_count = count_table_rows(cur, STAGE_NEW_TABLE)
+    print(f"Number of rows inserted into {STAGE_NEW_TABLE}: {row_count}")
+
+    # copy_temp_table(cur, temp_table_name)
     return
 
 
 def join_filter_ids(cur):
     # Join on bill_number and filter if bill_id is not found
-    temp_table_name = "new_bill_schedule_with_ids"
     temp_table_query = """
-        CREATE TABLE {0} AS
-        SELECT nbs.chamber_id, b.bill_id, b.openstates_bill_id, nbs.event_date, nbs.event_text
-        FROM new_bill_schedule nbs
-        JOIN {1}.bill b ON nbs.bill_number = b.bill_number
-        AND b.leg_session = '{2}'
-        WHERE b.bill_id IS NOT NULL;
+        CREATE TEMPORARY TABLE {0} AS
+        SELECT nbs.chamber_id, b.openstates_bill_id, nbs.event_date, nbs.event_text
+        FROM {1} nbs
+        JOIN {2}.bill b ON nbs.bill_number = b.bill_num
+        AND b.session = '{3}';
     """
-
-    # Query to count rows where bill_id is NULL
-    count_query = """
-        SELECT COUNT(*)
-        FROM {0}
-    """
-
     cur.execute(
-        temp_table_query.format(temp_table_name, LEGTRACKER_SCHEMA, CURRENT_SESSION)
+        temp_table_query.format(
+            STAGE_ID_TABLE,
+            STAGE_NEW_TABLE,
+            SNAPSHOT_SCHEMA,
+            CURRENT_SESSION
+        )
     )
-    cur.execute(count_query.format(temp_table_name))
-    bill_id_count = cur.fetchone()[0]
+
+    bill_id_count = count_table_rows(cur, STAGE_ID_TABLE)
     print(f"Number of rows staged with bill IDs: {bill_id_count}")
+
+    # test_table_name = "new_bills_left_outer"
+    # test_query = """
+    #     CREATE TEMPORARY TABLE {0} AS
+    #     SELECT nbs.bill_number, b.openstates_bill_id, nbs.event_date, nbs.event_text
+    #     FROM new_bill_schedule nbs
+    #     LEFT OUTER JOIN {1}.bill b 
+    #         ON nbs.bill_number = b.bill_num
+    #         AND b.session='{2}';
+    # """
+    # copy_temp_table(cur, temp_table_name)
+
+    # cur.execute(
+    #     test_query.format(test_table_name, SNAPSHOT_SCHEMA, CURRENT_SESSION)
+    # )
+
+    # copy_temp_table(cur, test_table_name)
     return
 
 
 def insert_new_schedule(cur):
     # Insert data into bill_schedule and update event text with newer data on conflict
     insert_query = """
-        INSERT INTO {0}.bill_schedule (bill_id, chamber_id, event_date, event_text, openstates_bill_id)
-        SELECT sw.bill_id, sw.chamber_id, sw.event_date, sw.event_text, sw.openstates_bill_id
-        FROM new_bill_schedule_with_ids sw
+        INSERT INTO {0}.{1} (chamber_id, event_date, event_text, openstates_bill_id)
+        SELECT sw.chamber_id, sw.event_date, sw.event_text, sw.openstates_bill_id
+        FROM {2} sw
         ON CONFLICT (openstates_bill_id, chamber_id, event_date)
         DO UPDATE SET
             event_text = EXCLUDED.event_text;
     """
-    cur.execute(insert_query.format(LEGTRACKER_SCHEMA))
+    cur.execute(insert_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE, STAGE_ID_TABLE))
     print("New events inserted...")
     return
 
@@ -126,9 +153,9 @@ def remove_staging_table(cur):
     drop_query = """
         DROP TABLE IF EXISTS {};
     """
-    cur.execute(drop_query.format("new_bill_schedule"))
-    cur.execute(drop_query.format("new_bill_schedule_with_ids"))
-    cur.execute(drop_query.format("existing_bill_schedule"))
+    cur.execute(drop_query.format(STAGE_ID_TABLE))
+    cur.execute(drop_query.format(STAGE_NEW_TABLE))
+    cur.execute(drop_query.format(STAGE_OLD_TABLE))
     print("Dropped staging tables...")
     return
 
