@@ -23,13 +23,14 @@ BASE_PARAMS = {
     "include": [
         "sponsorships",
         "abstracts",
-        "other_titles",
-        "other_identifiers",
+        # "other_titles",
+        # "other_identifiers",
         "actions",
-        "documents",
-        "versions",
+        # "documents",
+        # "versions",
         "votes",
-        "related_bills",
+        "sources",
+        # "related_bills",
     ],
 }
 
@@ -71,6 +72,7 @@ def process_bill_json(data, last_update):
                     + next_bill["identifier"]
                 )
         bill.append(current_abstract.replace("\n", "\\n"))
+        bill.append(next_bill["sources"]["url"])
         bills.append(bill)
 
         # process bill sponsors
