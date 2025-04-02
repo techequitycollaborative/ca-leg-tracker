@@ -45,8 +45,7 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
     committee_hearing_results = set()
 
     with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
+        browser, page = scraper_utils.make_page(p)
         page.goto(query_url)
 
         # iterate over date wrapper blocks

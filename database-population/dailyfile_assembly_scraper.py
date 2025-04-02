@@ -38,8 +38,7 @@ def scrape_dailyfile(
 
     # Open playwright handler
     with sync_playwright() as p:
-        browser = p.chromium.launch()
-        page = browser.new_page()
+        browser, page = scraper_utils.make_page(p)
         page.goto(url)
 
         # Find floor session "View Agenda" button and click it to fetch floor session data
@@ -52,7 +51,6 @@ def scrape_dailyfile(
 
         # Select Daily File section elements to loop over them
         for idx, section in enumerate(soup.select("div.dailyfile-section-item")):
-            print(idx)
             if idx == 0:  # Special case for the floor session
                 floor_date = scraper_utils.text_to_date_string(
                     section.select_one("div.header").text

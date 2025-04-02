@@ -6,6 +6,7 @@ from bs4 import BeautifulSoup as bs
 from dateutil import parser
 import urllib.request
 
+ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 Edg/116.0.1938.81"
 
 def text_to_date_string(s):
     """
@@ -76,6 +77,12 @@ def view_agenda(page, link):
         return e
     return
 
+def make_page(p):
+    browser = p.chromium.launch()
+    context = browser.new_context(user_agent=ua)
+    page = context.new_page()
+    assert page.evaluate("navigator.userAgent") == ua
+    return browser, page
 
 def make_static_soup(page, tag_pattern, make_request=True):
     """
