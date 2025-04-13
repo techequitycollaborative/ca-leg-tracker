@@ -29,8 +29,8 @@ import scraper_utils
 
 
 def scrape_dailyfile(
-    url="https://www.assembly.ca.gov/schedules-publications/assembly-daily-file", 
-    verbose=False
+    url="https://www.assembly.ca.gov/schedules-publications/assembly-daily-file",
+    verbose=False,
 ):
     # Initialize sets to store tuples of shape (DATE, EVENT_TEXT, BILL_NUMBER)
     floor_session_results = set()
@@ -79,30 +79,37 @@ def scrape_dailyfile(
                         ).select("span.measureLink")
 
                         # Update results with set intersection operation on a set of collected bills/measures
-                        floor_session_results = (
-                            floor_session_results
-                            | scraper_utils.collect_measures(
-                                floor_date, a.text.title(), measures, 1
-                            )
+                        current_events = scraper_utils.collect_measure_info(
+                            floor_date, a.text.title(), measures, 1
                         )
 
-            else:  # Committee hearing data is preloaded, no simulated clicks/fetching needed
+                        current_events_detailed = scraper_utils.add_measure_details(
+                            "", "", "", current_events
+                        )
+                        floor_session_results = floor_session_results | current_events
 
+            else:  # Committee hearing data is preloaded, no simulated clicks/fetching needed
+                # TODO: implement out postpone cancelled edge case
                 # Extract event text/description
                 hearing_description = section.select_one("div.header").text.title()
 
-                hearing_time_location = section.select_one("div.body").select_one(".attribute.time-location").text
+                hearing_time_location = (
+                    section.select_one("div.body")
+                    .select_one(".attribute.time-location")
+                    .text
+                )
 
-                # try:
-                #     hearing_time, hearing_details = hearing_time_location.split(" - ")
+                try:
+                    hearing_time, hearing_details = hearing_time_location.split(" - ")
 
-                #     hearing_location, hearing_room = hearing_details.split(", ")
-                    
-                #     print(hearing_time)
-                #     print(hearing_location)
-                #     print(hearing_room)
-                # except:
-                #     print("Could not extract details for {}: {}".format(hearing_description, hearing_time_location))
+                    hearing_location, hearing_room = hearing_details.split(", ")
+                except:
+                    print(
+                        "Could not extract details for {}: {}".format(
+                            hearing_description, hearing_time_location
+                        )
+                    )
+                    continue  # Ignore this whole event if not all details can be found
 
                 # Extract event date from the most recent h5 element
                 hearing_date = scraper_utils.text_to_date_string(
@@ -110,7 +117,7 @@ def scrape_dailyfile(
                 )
                 if verbose:
                     print("Extracting hearing info for {}".format(hearing_date))
-                    
+
                 # Select agenda content, which is either None or a Soup object
                 agenda = section.select_one(
                     "div.footer div.attribute.agenda-container.hide"
@@ -122,12 +129,19 @@ def scrape_dailyfile(
                     # Select all measures by their link element
                     measures = agenda.select("span.measureLink")
 
+                    # Extract core event info
+                    current_events = scraper_utils.collect_measure_info(
+                        hearing_date, hearing_description, measures, 1
+                    )
+
+                    # Extract event details
+                    current_events_detailed = scraper_utils.add_measure_details(
+                        hearing_time, hearing_location, hearing_room, current_events
+                    )
+
                     # Update results with set intersection operation on a set of collected bills/measures
                     committee_hearing_results = (
-                        committee_hearing_results
-                        | scraper_utils.collect_measures(
-                            hearing_date, hearing_description, measures, 1
-                        )
+                        committee_hearing_results | current_events_detailed
                     )
         # Close Playwright handler
         browser.close()

@@ -77,7 +77,7 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                 ).first  # Assuming Senate DF is only updated day-of
                 scheduled = not floor_section.get_by_text(
                     "No floor session scheduled."
-                ).is_visible()
+                ).is_visible(timeout=1000)
 
                 if scheduled:
                     floor_agenda = floor_section.get_by_role(
@@ -87,9 +87,10 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
 
                     agenda_found = not page.get_by_text(
                         "No Agendas were found."
-                    ).is_visible()
+                    ).is_visible(timeout=1000)
 
                     if agenda_found:
+                        print("Floor agenda for {} found".format(current_date))
                         # Extract HTML and parse as BeautifulSoup object
                         content = page.content()
                         soup = bs(content, "html.parser")
@@ -103,11 +104,15 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                                 "div", class_="agenda-item"
                             ).select("span.measureLink")
                             # Update results with set intersection operation on a set of collected bills/measures
+                            current_events = scraper_utils.collect_measure_info(
+                                current_date, a.text.title(), measures, 1
+                            )
+
+                            current_events_detailed = scraper_utils.add_measure_details(
+                                "", "", "", current_events
+                            )
                             floor_session_results = (
-                                floor_session_results
-                                | scraper_utils.collect_measures(
-                                    current_date, a.text.title(), measures, 2
-                                )
+                                floor_session_results | current_events
                             )
                     # Close agenda pop-up
                     close_button = page.get_by_role("button", name="Close").first
@@ -128,19 +133,17 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                     current_name = (
                         current_hearing.locator("div.hearing-name").inner_text().title()
                     )
-                    # print("####" * 10)
-                    # print(current_name)
-                    # try:
-                    #     current_details = current_hearing.locator("div.attribute.page-events__time-location").inner_text()
-                    #     print(current_details)
-                    #     current_time, current_loc = current_details.split(" - ")
-                    #     current_time = current_time.replace("Time: ", "")
-                    #     current_location, current_room = current_loc.split(", ")
-                    #     print(current_time)
-                    #     print(current_location)
-                    #     print(current_room)
-                    # except:
-                    #     print("No time or location details could be extraacted...")
+
+                    try:
+                        current_details = current_hearing.locator(
+                            "div.attribute.page-events__time-location"
+                        ).inner_text()
+                        current_time, current_loc = current_details.split(" - ")
+                        current_time = current_time.replace("Time: ", "")
+                        current_location, current_room = current_loc.split(", ")
+                    except:
+                        print("No time or location details could be extraacted...")
+                        continue
 
                     current_agenda = current_hearing.get_by_role(
                         "link", name="View Agenda"
@@ -154,11 +157,18 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                     measure_selector = soup.select("span.measureLink")
                     if verbose:
                         print("Found {} measures...".format(len(measure_selector)))
+
+                    current_events = scraper_utils.collect_measure_info(
+                        current_date, current_name, measure_selector, 2
+                    )
+
+                    current_events_detailed = scraper_utils.add_measure_details(
+                        current_time, current_location, current_room, current_events
+                    )
+
+                    # Update results with set intersection operation on a set of collected bills/measures
                     committee_hearing_results = (
-                        committee_hearing_results
-                        | scraper_utils.collect_measures(
-                            current_date, current_name, measure_selector, 2
-                        )
+                        committee_hearing_results | current_events_detailed
                     )
 
                     # Close agenda pop-up

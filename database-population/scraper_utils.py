@@ -8,6 +8,7 @@ import urllib.request
 
 ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 Edg/116.0.1938.81"
 
+
 def text_to_date_string(s):
     """
     Input: string
@@ -46,21 +47,30 @@ def normalize_bill_number(text):
     return text.replace("No.", "").replace(".", "").strip()
 
 
-def collect_measures(event_date, event_description, sel, chamber_id):
+def collect_measure_info(event_date, event_description, sel, chamber_id):
     """
     Input: date string, event description, list of selected measure HTML elements, chamber ID
     Output: set of tuples (CHAMBER_ID, EVENT_DATE, EVENT_TEXT, BILL_NUM)
     """
     results = set()
-    for measure in sel:
+    for i, measure in enumerate(sel):
         results.add(
             (
                 chamber_id,
                 event_date,
                 event_description,
                 normalize_bill_number(measure.text),
+                i + 1,  # generate an agenda item rank based on webpage
             )
         )
+    return results
+
+
+def add_measure_details(event_time, event_location, event_room, measures):
+    results = set()
+
+    for m in measures:  # unpack existing attributes and add these new ones
+        results.add((*m, event_time, event_location, event_room))
     return results
 
 
@@ -77,12 +87,14 @@ def view_agenda(page, link):
         return e
     return
 
+
 def make_page(p):
     browser = p.chromium.launch()
     context = browser.new_context(user_agent=ua)
     page = context.new_page()
     assert page.evaluate("navigator.userAgent") == ua
     return browser, page
+
 
 def make_static_soup(page, tag_pattern, make_request=True):
     """

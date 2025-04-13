@@ -9,55 +9,57 @@ the live bill_schedule table and remove all staging tables.
 import dailyfile_assembly_scraper as assembly
 import dailyfile_senate_scraper as senate
 import pandas as pd
+import db_utils
 from config import config
 import psycopg2
+import pickle
+import os
+from tqdm import tqdm
 
 LEGTRACKER_SCHEMA = config("postgresql_schemas")["legtracker_schema"]
 SNAPSHOT_SCHEMA = config("postgresql_schemas")["snapshot_schema"]
 CURRENT_SESSION = "20252026"
 
 # global vars for table names used across stages
-MAIN_TABLE = "bill_schedule"
+MAIN_TABLE = "bill_schedule_test"
 STAGE_OLD_TABLE = "stage_old_" + MAIN_TABLE
 STAGE_NEW_TABLE = "stage_new_" + MAIN_TABLE
 STAGE_ID_TABLE = "stage_id_" + MAIN_TABLE
 
-def copy_temp_table(cur, temp_table_name):
-    print("Writing table {} to CSV for review...".format(temp_table_name))
 
-    outputquery = """
-        COPY (SELECT * FROM {}) TO STDOUT WITH CSV HEADER
+def establish_schedule(cur):
+    create_query = """
+        CREATE TABLE IF NOT EXISTS {0}.{1} 
+        (
+            bill_schedule_id SERIAL PRIMARY KEY,
+            openstates_bill_id TEXT,
+            chamber_id INT,
+            event_date DATE,
+            event_text TEXT,
+            agenda_order INT,
+            event_time TEXT,
+            event_location TEXT,
+            event_room TEXT,
+            revised BOOLEAN,
+            event_status TEXT DEFAULT 'active',
+            CONSTRAINT bill_schedule_details UNIQUE(openstates_bill_id, chamber_id, event_date, event_text)
+        );
     """
-
-    with open('{0}.csv'.format(temp_table_name), 'w+') as f:
-        cur.copy_expert(outputquery.format(temp_table_name), f)
+    cur.execute(create_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE))
+    print(cur.statusmessage)
     return
 
-def count_table_rows(cur, table_name):
-    # Query to count rows where bill_id is NULL
-    count_query = """
-        SELECT COUNT(*)
-        FROM {0}
-    """
-    cur.execute(count_query.format(table_name))
-    row_count = cur.fetchone()[0]
-    return row_count
 
-def prune_bill_schedule(cur):
+def stage_old_schedule(cur):
     # Create staging table for events that are still upcoming
     temp_table_query = """
         CREATE TEMPORARY TABLE {0} AS
         SELECT * FROM {1}.{2}
         WHERE event_date >= CURRENT_DATE;
     """
+    print("Staging known events")
     cur.execute(temp_table_query.format(STAGE_OLD_TABLE, LEGTRACKER_SCHEMA, MAIN_TABLE))
-
-    # Truncate query
-    truncate_query = "TRUNCATE TABLE {0}.{1}"
-    # Truncate bill_schedule
-    cur.execute(truncate_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE))
-
-    # copy_temp_table(cur, temp_table_name)
+    print(cur.statusmessage)
     return
 
 
@@ -68,83 +70,94 @@ def stage_new_schedule(cur, schedule_data):
         chamber_id INT,
         bill_number TEXT,
         event_date DATE,
-        event_text TEXT
+        event_text TEXT,
+        agenda_order INT,
+        event_time TEXT,
+        event_location TEXT,
+        event_room TEXT,
+        revised BOOLEAN DEFAULT FALSE,
+        event_status TEXT DEFAULT 'active'
         );
     """
     cur.execute(temp_table_query.format(STAGE_NEW_TABLE))
-    print("Staging table created...")
+    print("Staging new events")
 
     # Insert data into staging table
     insert_query = """
-        INSERT INTO {0} (chamber_id, event_date, event_text, bill_number)
-        VALUES (%s, %s::DATE, %s, %s)
+        INSERT INTO {0} (chamber_id, event_date, event_text, bill_number, agenda_order, event_time, event_location, event_room)
+        VALUES (%s, %s::DATE, %s, %s, %s::INT, %s, %s, %s)
     """
     # Execute the insert query for each row in the schedule_data
-    for row in schedule_data:
-        cur.execute(
-            insert_query.format(STAGE_NEW_TABLE), (row[0], row[1], row[2], row[3])
-        )
-    print("New events staged...")
-
-    row_count = count_table_rows(cur, STAGE_NEW_TABLE)
-    print(f"Number of rows inserted into {STAGE_NEW_TABLE}: {row_count}")
+    for row in tqdm(schedule_data):
+        cur.execute(insert_query.format(STAGE_NEW_TABLE), tuple(row))
 
     # copy_temp_table(cur, temp_table_name)
     return
 
 
+def update_event_notes(cur, changed_events):  # TODO: deal with edge case 3
+    # assumes we have a set of known events + the HTML note value "postponed" OR "cancelled"
+    # check set length
+    # if there are events, find the corresponding row
+    # log if the row cannot be found
+    # if it can be found, update event_status with the HTML note value
+    return
+
+
 def join_filter_ids(cur):
+    # TODO: filter new events on known events for redundancy
     # Join on bill_number and filter if bill_id is not found
     temp_table_query = """
         CREATE TEMPORARY TABLE {0} AS
-        SELECT nbs.chamber_id, b.openstates_bill_id, nbs.event_date, nbs.event_text
+        SELECT nbs.chamber_id, b.openstates_bill_id, nbs.event_date, nbs.event_text, nbs.agenda_order, nbs.event_time, nbs.event_location, nbs.event_room
         FROM {1} nbs
         JOIN {2}.bill b ON nbs.bill_number = b.bill_num
         AND b.session = '{3}';
     """
     cur.execute(
         temp_table_query.format(
-            STAGE_ID_TABLE,
-            STAGE_NEW_TABLE,
-            SNAPSHOT_SCHEMA,
-            CURRENT_SESSION
+            STAGE_ID_TABLE, STAGE_NEW_TABLE, SNAPSHOT_SCHEMA, CURRENT_SESSION
         )
     )
-
-    bill_id_count = count_table_rows(cur, STAGE_ID_TABLE)
-    print(f"Number of rows staged with bill IDs: {bill_id_count}")
-
-    # test_table_name = "new_bills_left_outer"
-    # test_query = """
-    #     CREATE TEMPORARY TABLE {0} AS
-    #     SELECT nbs.bill_number, b.openstates_bill_id, nbs.event_date, nbs.event_text
-    #     FROM new_bill_schedule nbs
-    #     LEFT OUTER JOIN {1}.bill b 
-    #         ON nbs.bill_number = b.bill_num
-    #         AND b.session='{2}';
-    # """
-    # copy_temp_table(cur, temp_table_name)
-
-    # cur.execute(
-    #     test_query.format(test_table_name, SNAPSHOT_SCHEMA, CURRENT_SESSION)
-    # )
-
-    # copy_temp_table(cur, test_table_name)
+    print("Filtering and joining on Openstates IDs")
+    print(cur.statusmessage)
     return
 
 
-def insert_new_schedule(cur):
+def prune_bill_schedule(cur):
+    # Truncate query
+    truncate_query = "TRUNCATE TABLE {0}.{1}"
+    # Truncate bill_schedule
+    cur.execute(truncate_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE))
+    print("Pruning main table")
+    print(cur.statusmessage)
+    # copy_temp_table(cur, temp_table_name)
+    return
+
+
+def insert_schedule(cur):
     # Insert data into bill_schedule and update event text with newer data on conflict
     insert_query = """
-        INSERT INTO {0}.{1} (chamber_id, event_date, event_text, openstates_bill_id)
-        SELECT sw.chamber_id, sw.event_date, sw.event_text, sw.openstates_bill_id
+        INSERT INTO {0}.{1} (chamber_id, event_date, event_text, openstates_bill_id, agenda_order, event_time, event_location, event_room)
+        SELECT sw.chamber_id, sw.event_date, sw.event_text, sw.openstates_bill_id, sw.agenda_order, sw.event_time, sw.event_location, sw.event_room
         FROM {2} sw
-        ON CONFLICT (openstates_bill_id, chamber_id, event_date)
+        ON CONFLICT (openstates_bill_id, chamber_id, event_date, event_text)
         DO UPDATE SET
-            event_text = EXCLUDED.event_text;
+            event_time = EXCLUDED.event_time,
+            event_location = EXCLUDED.event_location,
+            event_room = EXCLUDED.event_room,
+            revised = TRUE;
     """
+    # insert existing events
+    cur.execute(insert_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE, STAGE_OLD_TABLE))
+    print("Known events inserted")
+    print(cur.statusmessage)
+
+    # insert the events that were just scraped
     cur.execute(insert_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE, STAGE_ID_TABLE))
-    print("New events inserted...")
+    print("New events inserted")
+    print(cur.statusmessage)
+
     return
 
 
@@ -154,24 +167,39 @@ def remove_staging_table(cur):
         DROP TABLE IF EXISTS {};
     """
     cur.execute(drop_query.format(STAGE_ID_TABLE))
+    print(cur.statusmessage)
     cur.execute(drop_query.format(STAGE_NEW_TABLE))
+    print(cur.statusmessage)
     cur.execute(drop_query.format(STAGE_OLD_TABLE))
-    print("Dropped staging tables...")
+    print(cur.statusmessage)
     return
 
 
-def legtracker_update(cur, schedule_data):
-    prune_bill_schedule(cur)
+def legtracker_update(cur, schedule_data, dev=True):
+    # establish that the table exists
+    establish_schedule(cur)
+    # stage existing events to temp table
+    stage_old_schedule(cur)
+    # stage new events to a separate temp table
+    # TODO: update known events with event_status IFF changed events are detected from scrape
     stage_new_schedule(cur, schedule_data)
+    # filter and join new events to openstates bill ID
     join_filter_ids(cur)
-    insert_new_schedule(cur)
+    # truncate past events
+    prune_bill_schedule(cur)
+    # insert all events
+    insert_schedule(cur)
     remove_staging_table(cur)
+
+    if not dev:
+        # remove pickle file in prod setting
+        os.remove("schedule.pickle")
     return
 
 
 def fetch_schedule_update():
-    assembly_update = assembly.scrape_dailyfile()
-    senate_update = senate.scrape_dailyfile()
+    assembly_update = assembly.scrape_dailyfile(verbose=True)
+    senate_update = senate.scrape_dailyfile(verbose=True)
 
     print(f"{len(assembly_update)} upcoming Assembly events")
     print(f"{len(senate_update)} upcoming Senate events")
@@ -192,10 +220,23 @@ def main():
         # create a cursor
         cur = conn.cursor()
 
-        print("Summary of schedules being updated:")
-        schedule_updates = fetch_schedule_update()
+        schedule_updates = None
 
-        if len(schedule_updates):
+        # Feature dev setting: check if schedule updates have been pickled for use
+        if os.path.exists("schedule.pickle"):  # If the pickle file exists, use it
+            print("Loading cached schedule updates...")
+            with open("schedule.pickle", mode="rb") as f:
+                schedule_updates = pickle.load(f)
+        else:  # Otherwise, just fetch as normal
+            print("Fetching schedule updates...")
+            schedule_updates = fetch_schedule_update()
+
+            # Pickle results which will be removed at the end
+            with open("schedule.pickle", mode="wb") as f:
+                pickle.dump(schedule_updates, f)
+            print("Updates have been pickled for now")
+
+        if len(schedule_updates):  # Check if we have stuff before updating tables
             print("Updating bill schedule for both chambers...")
             legtracker_update(cur, schedule_updates)
         else:
