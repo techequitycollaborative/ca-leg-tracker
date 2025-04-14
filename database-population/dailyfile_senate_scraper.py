@@ -28,7 +28,7 @@ import scraper_utils
 
 def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=False):
     start_date = datetime.date.today()
-    end_date = start_date + datetime.timedelta(days=30)
+    end_date = start_date + datetime.timedelta(days=15)
     query_url = (
         source_url
         + "?startDate="
@@ -43,6 +43,7 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
 
     floor_session_results = set()
     committee_hearing_results = set()
+    committee_hearing_changes = set()
 
     with sync_playwright() as p:
         browser, page = scraper_utils.make_page(p)
@@ -87,7 +88,7 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
 
                     agenda_found = not page.get_by_text(
                         "No Agendas were found."
-                    ).is_visible(timeout=1000)
+                    ).is_visible(timeout=5000)
 
                     if agenda_found:
                         print("Floor agenda for {} found".format(current_date))
@@ -129,11 +130,12 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                     print("Found {} hearings...".format(hearing_elements.count()))
                 # Iterate over individual hearings
                 for j in range(hearing_elements.count()):
+                    # Extract current hearing details
                     current_hearing = hearing_elements.nth(j)
                     current_name = (
                         current_hearing.locator("div.hearing-name").inner_text().title()
                     )
-
+                    # Extract details like time, location, room
                     try:
                         current_details = current_hearing.locator(
                             "div.attribute.page-events__time-location"
@@ -142,9 +144,32 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                         current_time = current_time.replace("Time: ", "")
                         current_location, current_room = current_loc.split(", ")
                     except:
-                        print("No time or location details could be extraacted...")
+                        print("No time or location details could be extracted...")
                         continue
+                    
+                    # Extract hearing notes if available
+                    current_note = current_hearing.locator(
+                        "div.attribute.note"
+                        ).inner_text().lower()
+                    
+                    if len(current_note) and "change" not in current_note:
+                        temp = (
+                            2,
+                            current_date,
+                            current_name,
+                            current_time,
+                            current_location,
+                            current_room
+                        )
+                        if "canceled" in current_note:
+                            committee_hearing_changes.add((temp + ("canceled",)))
+                        elif "postponed" in current_note:
+                            committee_hearing_changes.add((temp + ("postponed",)))
+                        else:
+                            print("Unparseable note: {}".format(current_note))
+                            print("Hearing details: {0}, {1}".format(current_date, current_name))
 
+                    # Extract every bill on the agenda
                     current_agenda = current_hearing.get_by_role(
                         "link", name="View Agenda"
                     )
@@ -176,7 +201,9 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                     close_button.click()
 
         browser.close()
-    return floor_session_results | committee_hearing_results
+        print("Closed senate browser")
+    final_results = floor_session_results | committee_hearing_results
+    return final_results, committee_hearing_changes
 
 
 def main():
