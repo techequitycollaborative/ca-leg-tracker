@@ -72,52 +72,54 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
             else:
                 if verbose:
                     print("Looking for events...")
-                # Examine floor session content
-                floor_section = current_wrapper.locator(
-                    "div.dailyfile-section.floor-meetings"
-                ).first  # Assuming Senate DF is only updated day-of
-                scheduled = not floor_section.get_by_text(
-                    "No floor session scheduled."
-                ).is_visible(timeout=1000)
+                
+                if i == 0: # Assuming Senate DF is only updated day-of
+                    # Examine floor session content
+                    floor_section = current_wrapper.locator(
+                        "div.dailyfile-section.floor-meetings"
+                    ).first  
+                    scheduled = not floor_section.get_by_text(
+                        "No floor session scheduled."
+                    ).is_visible(timeout=1000)
 
-                if scheduled:
-                    floor_agenda = floor_section.get_by_role(
-                        "link", name="View Agenda"
-                    ).first  # Assuming we only need first link
-                    scraper_utils.view_agenda(page, floor_agenda)
+                    if scheduled:
+                        floor_agenda = floor_section.get_by_role(
+                            "link", name="View Agenda"
+                        ).first  # Assuming we only need first link
+                        scraper_utils.view_agenda(page, floor_agenda)
 
-                    agenda_found = not page.get_by_text(
-                        "No Agendas were found."
-                    ).is_visible(timeout=5000)
+                        agenda_found = not page.get_by_text(
+                            "No Agendas were found."
+                        ).is_visible(timeout=5000)
 
-                    if agenda_found:
-                        print("Floor agenda for {} found".format(current_date))
-                        # Extract HTML and parse as BeautifulSoup object
-                        content = page.content()
-                        soup = bs(content, "html.parser")
-                        floor_content = soup.select_one("div.agenda-container")
-                        # Parse agenda into actions
-                        floor_actions = floor_content.select("h3")
-                        for a in floor_actions:
+                        if agenda_found:
+                            print("Floor agenda for {} found".format(current_date))
+                            # Extract HTML and parse as BeautifulSoup object
+                            content = page.content()
+                            soup = bs(content, "html.parser")
+                            floor_content = soup.select_one("div.agenda-container")
+                            # Parse agenda into actions
+                            floor_actions = floor_content.select("h3")
+                            for a in floor_actions:
 
-                            # Extract measures AKA bills to be covered in the floor session and union with existing results
-                            measures = a.find_next_sibling(
-                                "div", class_="agenda-item"
-                            ).select("span.measureLink")
-                            # Update results with set intersection operation on a set of collected bills/measures
-                            current_events = scraper_utils.collect_measure_info(
-                                current_date, a.text.title(), measures, 1
-                            )
+                                # Extract measures AKA bills to be covered in the floor session and union with existing results
+                                measures = a.find_next_sibling(
+                                    "div", class_="agenda-item"
+                                ).select("span.measureLink")
+                                # Update results with set intersection operation on a set of collected bills/measures
+                                current_events = scraper_utils.collect_measure_info(
+                                    current_date, a.text.title(), measures, 1
+                                )
 
-                            current_events_detailed = scraper_utils.add_measure_details(
-                                "", "", "", current_events
-                            )
-                            floor_session_results = (
-                                floor_session_results | current_events
-                            )
-                    # Close agenda pop-up
-                    close_button = page.get_by_role("button", name="Close").first
-                    close_button.click()
+                                current_events_detailed = scraper_utils.add_measure_details(
+                                    "", "", "", current_events
+                                )
+                                floor_session_results = (
+                                    floor_session_results | current_events
+                                )
+                        # Close agenda pop-up
+                        close_button = page.get_by_role("button", name="Close").first
+                        close_button.click()
 
                 # Examine committee hearing content
                 committee_hearing_section = current_wrapper.locator(
