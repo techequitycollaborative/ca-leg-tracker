@@ -35,6 +35,7 @@ def scrape_dailyfile(
     # Initialize sets to store tuples of shape (DATE, EVENT_TEXT, BILL_NUMBER)
     floor_session_results = set()
     committee_hearing_results = set()
+    committee_hearing_changes = set()
 
     # Open playwright handler
     with sync_playwright() as p:
@@ -118,6 +119,25 @@ def scrape_dailyfile(
                 if verbose:
                     print("Extracting hearing info for {}".format(hearing_date))
 
+                # Extract hearing notes if available
+                hearing_note = section.select_one("div.body").select_one(".attribute.note").text.lower()
+                if len(hearing_note) and "change" not in hearing_note:
+                    temp = (
+                        1,
+                        hearing_date,
+                        hearing_description,
+                        hearing_time,
+                        hearing_location,
+                        hearing_room
+                    )
+                    if "canceled" in hearing_note:
+                        committee_hearing_changes.add((temp + ("canceled",)))
+                    elif "postponed" in hearing_note:
+                        committee_hearing_changes.add((temp + ("postponed",)))
+                    else:
+                        print("Unparseable note: {}".format(hearing_note))
+                        print("Hearing details: {0}, {1}".format(hearing_date, hearing_description))
+
                 # Select agenda content, which is either None or a Soup object
                 agenda = section.select_one(
                     "div.footer div.attribute.agenda-container.hide"
@@ -145,9 +165,12 @@ def scrape_dailyfile(
                     )
         # Close Playwright handler
         browser.close()
+        print("Assembly browser closed")
 
     # Return the intersection of both sets as the total set of all evenets
-    return floor_session_results | committee_hearing_results
+    final_results = floor_session_results | committee_hearing_results
+
+    return final_results, committee_hearing_changes
 
 
 def main():
