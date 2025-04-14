@@ -173,13 +173,14 @@ def update_event_notes(cur, changed_events):  # deal with edge case 3
         """
 
         for change in tqdm(changed_events):
+            temp = update_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE, *change)
+            print(temp)
             # Unpack all tuple elements in order
-            cur.execute(update_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE, *change))
+            cur.execute(temp)
             
             # log if the row cannot be found
             if cur.statusmessage == 'UPDATE 0':
                 print("Could not find rows matching these attributes:")
-                print(change)
             else:
                 print(cur.statusmessage)
     else:
@@ -233,7 +234,6 @@ def fetch_schedule_update():
             final_update = pickle.load(schedule_f)
         with open("changes.pickle", mode="rb") as change_f:
             final_changes = pickle.load(change_f)
-            final_changes = tuple(chain.from_iterable(final_changes))
 
     else:  # Otherwise, just fetch as normal
         print("Fetching schedule updates...")
