@@ -15,6 +15,7 @@ import psycopg2
 import pickle
 import os
 from tqdm import tqdm
+from itertools import chain
 
 LEGTRACKER_SCHEMA = config("postgresql_schemas")["legtracker_schema"]
 SNAPSHOT_SCHEMA = config("postgresql_schemas")["snapshot_schema"]
@@ -28,6 +29,7 @@ STAGE_ID_TABLE = "stage_id_" + MAIN_TABLE
 
 
 def establish_schedule(cur):
+    # constraint bill_schedule_details covers edge case 1
     create_query = """
         CREATE TABLE IF NOT EXISTS {0}.{1} 
         (
@@ -40,9 +42,10 @@ def establish_schedule(cur):
             event_time TEXT,
             event_location TEXT,
             event_room TEXT,
-            revised BOOLEAN,
+            revised BOOLEAN DEFAULT FALSE,
             event_status TEXT DEFAULT 'active',
-            CONSTRAINT bill_schedule_details UNIQUE(openstates_bill_id, chamber_id, event_date, event_text)
+            CONSTRAINT bill_schedule_info UNIQUE(openstates_bill_id, chamber_id, event_date, event_text),
+            CONSTRAINT bill_schedule_details UNIQUE(openstates_bill_id, chamber_id, event_date, event_text, agenda_order, event_time, event_location, event_room)
         );
     """
     cur.execute(create_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE))
@@ -95,17 +98,7 @@ def stage_new_schedule(cur, schedule_data):
     return
 
 
-def update_event_notes(cur, changed_events):  # TODO: deal with edge case 3
-    # assumes we have a set of known events + the HTML note value "postponed" OR "cancelled"
-    # check set length
-    # if there are events, find the corresponding row
-    # log if the row cannot be found
-    # if it can be found, update event_status with the HTML note value
-    return
-
-
 def join_filter_ids(cur):
-    # TODO: filter new events on known events for redundancy
     # Join on bill_number and filter if bill_id is not found
     temp_table_query = """
         CREATE TEMPORARY TABLE {0} AS
@@ -119,10 +112,9 @@ def join_filter_ids(cur):
             STAGE_ID_TABLE, STAGE_NEW_TABLE, SNAPSHOT_SCHEMA, CURRENT_SESSION
         )
     )
-    print("Filtering and joining on Openstates IDs")
+    print("Joining on Openstates IDs")
     print(cur.statusmessage)
     return
-
 
 def prune_bill_schedule(cur):
     # Truncate query
@@ -136,28 +128,62 @@ def prune_bill_schedule(cur):
 
 
 def insert_schedule(cur):
-    # Insert data into bill_schedule and update event text with newer data on conflict
+    # Insert data into bill_schedule and update event text with newer data on conflict (edge case 2)
+
     insert_query = """
         INSERT INTO {0}.{1} (chamber_id, event_date, event_text, openstates_bill_id, agenda_order, event_time, event_location, event_room)
         SELECT sw.chamber_id, sw.event_date, sw.event_text, sw.openstates_bill_id, sw.agenda_order, sw.event_time, sw.event_location, sw.event_room
         FROM {2} sw
         ON CONFLICT (openstates_bill_id, chamber_id, event_date, event_text)
         DO UPDATE SET
+            agenda_order = EXCLUDED.agenda_order,
             event_time = EXCLUDED.event_time,
             event_location = EXCLUDED.event_location,
             event_room = EXCLUDED.event_room,
-            revised = TRUE;
+            revised = TRUE,
+            event_status = EXCLUDED.event_status;
     """
-    # insert existing events
+    # insert all valid events
     cur.execute(insert_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE, STAGE_OLD_TABLE))
-    print("Known events inserted")
+    print("All known events re-inserted")
     print(cur.statusmessage)
 
-    # insert the events that were just scraped
+    # # insert the events that were just scraped
     cur.execute(insert_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE, STAGE_ID_TABLE))
     print("New events inserted")
     print(cur.statusmessage)
 
+    return
+
+def update_event_notes(cur, changed_events):  # deal with edge case 3
+    # assumes we have a set of known events + the HTML note value "postponed" OR "cancelled"
+    # check set length
+    if len(changed_events):
+        print("Preparing to change event status")
+    
+        update_query = """
+            UPDATE {0}.{1}
+            SET event_status='{8}'
+            WHERE chamber_id={2} AND
+            event_date='{3}' AND
+            event_text='{4}' AND
+            event_time='{5}' AND
+            event_location='{6}' AND
+            event_room='{7}';
+        """
+
+        for change in tqdm(changed_events):
+            # Unpack all tuple elements in order
+            cur.execute(update_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE, *change))
+            
+            # log if the row cannot be found
+            if cur.statusmessage == 'UPDATE 0':
+                print("Could not find rows matching these attributes:")
+                print(change)
+            else:
+                print(cur.statusmessage)
+    else:
+        print("All event statuses are up-to-date")
     return
 
 
@@ -175,13 +201,12 @@ def remove_staging_table(cur):
     return
 
 
-def legtracker_update(cur, schedule_data, dev=True):
+def legtracker_update(cur, schedule_data, schedule_changes, dev=True):
     # establish that the table exists
     establish_schedule(cur)
     # stage existing events to temp table
     stage_old_schedule(cur)
     # stage new events to a separate temp table
-    # TODO: update known events with event_status IFF changed events are detected from scrape
     stage_new_schedule(cur, schedule_data)
     # filter and join new events to openstates bill ID
     join_filter_ids(cur)
@@ -189,6 +214,9 @@ def legtracker_update(cur, schedule_data, dev=True):
     prune_bill_schedule(cur)
     # insert all events
     insert_schedule(cur)
+    # update known events with event_status IFF changed events are detected from scrape
+    update_event_notes(cur, schedule_changes)
+    # remove staging tables
     remove_staging_table(cur)
 
     if not dev:
@@ -198,15 +226,35 @@ def legtracker_update(cur, schedule_data, dev=True):
 
 
 def fetch_schedule_update():
-    assembly_update = assembly.scrape_dailyfile(verbose=True)
-    senate_update = senate.scrape_dailyfile(verbose=True)
+    # Feature dev setting: check if schedule updates have been pickled for use
+    if os.path.exists("schedule.pickle") and os.path.exists("changes.pickle"):  # If the pickle file exists, use it
+        print("Loading cached schedule updates...")
+        with open("schedule.pickle", mode="rb") as schedule_f:
+            final_update = pickle.load(schedule_f)
+        with open("changes.pickle", mode="rb") as change_f:
+            final_changes = pickle.load(change_f)
+            final_changes = tuple(chain.from_iterable(final_changes))
 
-    print(f"{len(assembly_update)} upcoming Assembly events")
-    print(f"{len(senate_update)} upcoming Senate events")
+    else:  # Otherwise, just fetch as normal
+        print("Fetching schedule updates...")
+        assembly_update, assembly_changes = assembly.scrape_dailyfile(verbose=True)
+        senate_update, senate_changes = senate.scrape_dailyfile(verbose=True)
 
-    # join sets before returning
-    return assembly_update | senate_update
+        print(f"{len(assembly_update)} upcoming Assembly events")
+        print(f"{len(senate_update)} upcoming Senate events")
 
+        # join sets before returning
+        final_update = assembly_update | senate_update
+        final_changes = assembly_changes | senate_changes
+
+        # Pickle results which will be removed at the end
+        with open("schedule.pickle", mode="wb") as f:
+            pickle.dump(final_update, f)
+        print("Updates have been pickled")
+        with open("changes.pickle", mode="wb") as f:
+            pickle.dump(final_changes, f)
+        print("Changes have been pickled")
+    return final_update, final_changes
 
 def main():
     conn = None
@@ -220,25 +268,11 @@ def main():
         # create a cursor
         cur = conn.cursor()
 
-        schedule_updates = None
-
-        # Feature dev setting: check if schedule updates have been pickled for use
-        if os.path.exists("schedule.pickle"):  # If the pickle file exists, use it
-            print("Loading cached schedule updates...")
-            with open("schedule.pickle", mode="rb") as f:
-                schedule_updates = pickle.load(f)
-        else:  # Otherwise, just fetch as normal
-            print("Fetching schedule updates...")
-            schedule_updates = fetch_schedule_update()
-
-            # Pickle results which will be removed at the end
-            with open("schedule.pickle", mode="wb") as f:
-                pickle.dump(schedule_updates, f)
-            print("Updates have been pickled for now")
+        schedule_updates, schedule_changes = fetch_schedule_update()
 
         if len(schedule_updates):  # Check if we have stuff before updating tables
             print("Updating bill schedule for both chambers...")
-            legtracker_update(cur, schedule_updates)
+            legtracker_update(cur, schedule_updates, schedule_changes)
         else:
             print("No schedule updates; finishing")
 
