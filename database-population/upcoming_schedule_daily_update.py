@@ -8,14 +8,12 @@ the live bill_schedule table and remove all staging tables.
 
 import dailyfile_assembly_scraper as assembly
 import dailyfile_senate_scraper as senate
-import pandas as pd
-import db_utils
 from config import config
 import psycopg2
 import pickle
 import os
 from tqdm import tqdm
-from itertools import chain
+from datetime import date
 
 LEGTRACKER_SCHEMA = config("postgresql_schemas")["legtracker_schema"]
 SNAPSHOT_SCHEMA = config("postgresql_schemas")["snapshot_schema"]
@@ -180,7 +178,7 @@ def update_event_notes(cur, changed_events):  # deal with edge case 3
             
             # log if the row cannot be found
             if cur.statusmessage == 'UPDATE 0':
-                print("Could not find rows matching these attributes:")
+                print("Could not find rows matching these attributes")
             else:
                 print(cur.statusmessage)
     else:
@@ -226,13 +224,16 @@ def legtracker_update(cur, schedule_data, schedule_changes, dev=True):
     return
 
 
-def fetch_schedule_update():
+def fetch_schedule_update(dev=False):
+    schedule_cache = "{}_schedule.pickle".format((str(date.today())))
+    changes_cache = "{}_changes.pickle".format((str(date.today())))
+    
     # Feature dev setting: check if schedule updates have been pickled for use
-    if os.path.exists("schedule.pickle") and os.path.exists("changes.pickle"):  # If the pickle file exists, use it
+    if dev and os.path.exists(schedule_cache) and os.path.exists(changes_cache):  # If the pickle file exists, use it
         print("Loading cached schedule updates...")
-        with open("schedule.pickle", mode="rb") as schedule_f:
+        with open(schedule_cache, mode="rb") as schedule_f:
             final_update = pickle.load(schedule_f)
-        with open("changes.pickle", mode="rb") as change_f:
+        with open(changes_cache, mode="rb") as change_f:
             final_changes = pickle.load(change_f)
 
     else:  # Otherwise, just fetch as normal
@@ -248,10 +249,10 @@ def fetch_schedule_update():
         final_changes = assembly_changes | senate_changes
 
         # Pickle results which will be removed at the end
-        with open("schedule.pickle", mode="wb") as f:
+        with open(schedule_cache, mode="wb") as f:
             pickle.dump(final_update, f)
         print("Updates have been pickled")
-        with open("changes.pickle", mode="wb") as f:
+        with open(changes_cache, mode="wb") as f:
             pickle.dump(final_changes, f)
         print("Changes have been pickled")
     return final_update, final_changes
