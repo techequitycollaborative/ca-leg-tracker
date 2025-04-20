@@ -108,14 +108,14 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                                 ).select("span.measureLink")
                                 # Update results with set intersection operation on a set of collected bills/measures
                                 current_events = scraper_utils.collect_measure_info(
-                                    current_date, a.text.title(), measures, 1
+                                    current_date, a.text.title(), measures, 2
                                 )
 
                                 current_events_detailed = scraper_utils.add_measure_details(
                                     "", "", "", current_events
                                 )
                                 floor_session_results = (
-                                    floor_session_results | current_events
+                                    floor_session_results | current_events_detailed
                                 )
                         # Close agenda pop-up
                         close_button = page.get_by_role("button", name="Close").first

@@ -87,7 +87,7 @@ def scrape_dailyfile(
                         current_events_detailed = scraper_utils.add_measure_details(
                             "", "", "", current_events
                         )
-                        floor_session_results = floor_session_results | current_events
+                        floor_session_results = floor_session_results | current_events_detailed
 
             else:  # Committee hearing data is preloaded, no simulated clicks/fetching needed
                 # TODO: implement out postpone cancelled edge case
