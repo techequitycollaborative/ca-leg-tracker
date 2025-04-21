@@ -87,7 +87,9 @@ def scrape_dailyfile(
                         current_events_detailed = scraper_utils.add_measure_details(
                             "", "", "", current_events
                         )
-                        floor_session_results = floor_session_results | current_events_detailed
+                        floor_session_results = (
+                            floor_session_results | current_events_detailed
+                        )
 
             else:  # Committee hearing data is preloaded, no simulated clicks/fetching needed
                 # TODO: implement out postpone cancelled edge case
@@ -120,7 +122,11 @@ def scrape_dailyfile(
                     print("Extracting hearing info for {}".format(hearing_date))
 
                 # Extract hearing notes if available
-                hearing_note = section.select_one("div.body").select_one(".attribute.note").text.lower()
+                hearing_note = (
+                    section.select_one("div.body")
+                    .select_one(".attribute.note")
+                    .text.lower()
+                )
                 if len(hearing_note) and "change" not in hearing_note:
                     temp = (
                         1,
@@ -128,7 +134,7 @@ def scrape_dailyfile(
                         hearing_description,
                         hearing_time,
                         hearing_location,
-                        hearing_room
+                        hearing_room,
                     )
                     if "canceled" in hearing_note:
                         committee_hearing_changes.add((temp + ("canceled",)))
@@ -136,7 +142,11 @@ def scrape_dailyfile(
                         committee_hearing_changes.add((temp + ("postponed",)))
                     else:
                         print("Unparseable note: {}".format(hearing_note))
-                        print("Hearing details: {0}, {1}".format(hearing_date, hearing_description))
+                        print(
+                            "Hearing details: {0}, {1}".format(
+                                hearing_date, hearing_description
+                            )
+                        )
 
                 # Select agenda content, which is either None or a Soup object
                 agenda = section.select_one(

@@ -72,12 +72,12 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
             else:
                 if verbose:
                     print("Looking for events...")
-                
-                if i == 0: # Assuming Senate DF is only updated day-of
+
+                if i == 0:  # Assuming Senate DF is only updated day-of
                     # Examine floor session content
                     floor_section = current_wrapper.locator(
                         "div.dailyfile-section.floor-meetings"
-                    ).first  
+                    ).first
                     scheduled = not floor_section.get_by_text(
                         "No floor session scheduled."
                     ).is_visible(timeout=1000)
@@ -111,8 +111,10 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                                     current_date, a.text.title(), measures, 2
                                 )
 
-                                current_events_detailed = scraper_utils.add_measure_details(
-                                    "", "", "", current_events
+                                current_events_detailed = (
+                                    scraper_utils.add_measure_details(
+                                        "", "", "", current_events
+                                    )
                                 )
                                 floor_session_results = (
                                     floor_session_results | current_events_detailed
@@ -148,12 +150,14 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                     except:
                         print("No time or location details could be extracted...")
                         continue
-                    
+
                     # Extract hearing notes if available
-                    current_note = current_hearing.locator(
-                        "div.attribute.note"
-                        ).inner_text().lower()
-                    
+                    current_note = (
+                        current_hearing.locator("div.attribute.note")
+                        .inner_text()
+                        .lower()
+                    )
+
                     if len(current_note) and "change" not in current_note:
                         temp = (
                             2,
@@ -161,7 +165,7 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                             current_name,
                             current_time,
                             current_location,
-                            current_room
+                            current_room,
                         )
                         if "canceled" in current_note:
                             committee_hearing_changes.add((temp + ("canceled",)))
@@ -169,7 +173,11 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                             committee_hearing_changes.add((temp + ("postponed",)))
                         else:
                             print("Unparseable note: {}".format(current_note))
-                            print("Hearing details: {0}, {1}".format(current_date, current_name))
+                            print(
+                                "Hearing details: {0}, {1}".format(
+                                    current_date, current_name
+                                )
+                            )
 
                     # Extract every bill on the agenda
                     current_agenda = current_hearing.get_by_role(

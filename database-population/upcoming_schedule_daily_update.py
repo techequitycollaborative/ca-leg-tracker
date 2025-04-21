@@ -22,11 +22,11 @@ CURRENT_SESSION = "20252026"
 
 # global vars for table names used across stages
 MAIN_TABLE = "bill_schedule_test"
-STAGE_KNOWN_TABLE = "stage_known_" + MAIN_TABLE
 STAGE_OLD_TABLE = "stage_old_" + MAIN_TABLE
+STAGE_OLD_VALID_TABLE = "stage_old_valid_" + MAIN_TABLE
 STAGE_NEW_TABLE = "stage_new_" + MAIN_TABLE
-STAGE_ID_TABLE = "stage_id_" + MAIN_TABLE
-STAGE_FINAL_TABLE = "stage_final_" + MAIN_TABLE
+STAGE_NEW_ID_TABLE = "stage_new_id_" + MAIN_TABLE
+STAGE_NEW_VALID_TABLE = "stage_new_valid_" + MAIN_TABLE
 
 
 def establish_schedule(cur):
@@ -62,10 +62,10 @@ def stage_known_schedule(cur):
         WHERE event_date >= CURRENT_DATE;
     """
     print("Copying known events")
-    cur.execute(temp_table_query.format(STAGE_KNOWN_TABLE, LEGTRACKER_SCHEMA, MAIN_TABLE))
+    cur.execute(temp_table_query.format(STAGE_OLD_TABLE, LEGTRACKER_SCHEMA, MAIN_TABLE))
     print(cur.statusmessage)
 
-    copy_temp_table(cur, STAGE_KNOWN_TABLE)
+    copy_temp_table(cur, STAGE_OLD_TABLE)
     return
 
 
@@ -112,19 +112,22 @@ def join_filter_ids(cur):
     """
     cur.execute(
         temp_table_query.format(
-            STAGE_ID_TABLE, STAGE_NEW_TABLE, SNAPSHOT_SCHEMA, CURRENT_SESSION
+            STAGE_NEW_ID_TABLE, STAGE_NEW_TABLE, SNAPSHOT_SCHEMA, CURRENT_SESSION
         )
     )
     print("Joining on Openstates IDs")
     print(cur.statusmessage)
 
-    copy_temp_table(cur, STAGE_ID_TABLE)
+    copy_temp_table(cur, STAGE_NEW_ID_TABLE)
     return
 
-def update_known_events(cur):
-    print("Preparing to mark events as 'moved' if they don't exist in the current scraper pull")
 
-    old_query = """
+def update_known_events(cur):
+    print(
+        "Preparing to mark events as 'moved' if they don't exist in the current scraper pull"
+    )
+
+    old_valid_query = """
         CREATE TEMPORARY TABLE {0} AS
         SELECT b.bill_number, a.*
         FROM {1} a
@@ -156,16 +159,23 @@ def update_known_events(cur):
             );
     """
 
-    cur.execute(old_query.format(STAGE_OLD_TABLE, STAGE_KNOWN_TABLE, STAGE_ID_TABLE))
-    print("Check if any known events are out of date")
+    cur.execute(
+        old_valid_query.format(
+            STAGE_OLD_VALID_TABLE, STAGE_OLD_TABLE, STAGE_NEW_ID_TABLE
+        )
+    )
+    print("Validate known events by matching them to the current update")
     print(cur.statusmessage)
 
-    cur.execute(update_query.format(STAGE_OLD_TABLE, STAGE_ID_TABLE))
-    print("If bill number can't be matched to current update, set event status to 'moved'")
+    cur.execute(update_query.format(STAGE_OLD_TABLE, STAGE_NEW_ID_TABLE))
+    print(
+        "If bill number can't be matched to current update, set event status to 'moved'"
+    )
     print(cur.statusmessage)
 
     copy_temp_table(cur, STAGE_OLD_TABLE)
     return
+
 
 def prune_bill_schedule(cur):
     # Truncate query
@@ -194,12 +204,15 @@ def prune_bill_schedule(cur):
                 event_room = sn.event_room
         );
     """
-    
-    cur.execute(prune_query.format(STAGE_FINAL_TABLE, STAGE_ID_TABLE, STAGE_OLD_TABLE))
+
+    cur.execute(
+        prune_query.format(STAGE_NEW_VALID_TABLE, STAGE_NEW_ID_TABLE, STAGE_OLD_TABLE)
+    )
     print(cur.statusmessage)
     print("Pruned duplicate events from the set of new events")
-    copy_temp_table(cur, STAGE_FINAL_TABLE)
+    copy_temp_table(cur, STAGE_NEW_VALID_TABLE)
     return
+
 
 def insert_schedule(cur):
     # Insert data into bill_schedule and update event text with newer data on conflict (edge case 2)
@@ -218,23 +231,28 @@ def insert_schedule(cur):
             event_status = EXCLUDED.event_status;
     """
     # insert all valid events
-    cur.execute(insert_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE, STAGE_OLD_TABLE))
+    cur.execute(
+        insert_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE, STAGE_OLD_VALID_TABLE)
+    )
     print("All known events re-inserted")
     print(cur.statusmessage)
 
     # # insert the events that were just scraped
-    cur.execute(insert_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE, STAGE_FINAL_TABLE))
+    cur.execute(
+        insert_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE, STAGE_NEW_VALID_TABLE)
+    )
     print("New events inserted")
     print(cur.statusmessage)
 
     return
+
 
 def update_event_notes(cur, changed_events):  # deal with edge case 3
     # assumes we have a set of known events + the HTML note value "postponed" OR "cancelled"
     # check set length
     if len(changed_events):
         print("Preparing to update event postponement or cancellation")
-    
+
         update_query = """
             UPDATE {0}.{1}
             SET event_status='{8}'
@@ -251,9 +269,9 @@ def update_event_notes(cur, changed_events):  # deal with edge case 3
             print(temp)
             # Unpack all tuple elements in order
             cur.execute(temp)
-            
+
             # log if the row cannot be found
-            if cur.statusmessage == 'UPDATE 0':
+            if cur.statusmessage == "UPDATE 0":
                 print("Upcoming schedule changes do not affect tracked events")
             else:
                 print(cur.statusmessage)
@@ -267,7 +285,11 @@ def remove_staging_table(cur):
     drop_query = """
         DROP TABLE IF EXISTS {};
     """
-    cur.execute(drop_query.format(STAGE_ID_TABLE))
+    cur.execute(drop_query.format(STAGE_NEW_VALID_TABLE))
+    print(cur.statusmessage)
+    cur.execute(drop_query.format(STAGE_OLD_VALID_TABLE))
+    print(cur.statusmessage)
+    cur.execute(drop_query.format(STAGE_NEW_ID_TABLE))
     print(cur.statusmessage)
     cur.execute(drop_query.format(STAGE_NEW_TABLE))
     print(cur.statusmessage)
@@ -313,7 +335,9 @@ def fetch_schedule_update(dev=False):
     # schedule_cache = "2025-04-19_schedule.pickle"
     # changes_cache = "2025-04-19_changes.pickle"
     # Feature dev setting: check if schedule updates have been pickled for use
-    if dev and os.path.exists(schedule_cache) and os.path.exists(changes_cache):  # If the pickle file exists, use it
+    if (
+        dev and os.path.exists(schedule_cache) and os.path.exists(changes_cache)
+    ):  # If the pickle file exists, use it
         print("Loading cached schedule updates...")
         with open(schedule_cache, mode="rb") as schedule_f:
             final_update = pickle.load(schedule_f)
@@ -340,6 +364,7 @@ def fetch_schedule_update(dev=False):
             pickle.dump(final_changes, f)
         print("Changes have been pickled")
     return final_update, final_changes
+
 
 def main():
     conn = None
