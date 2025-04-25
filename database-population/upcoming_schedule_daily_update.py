@@ -22,15 +22,15 @@ CURRENT_SESSION = "20252026"
 
 # global vars for table names used across stages
 MAIN_TABLE = "bill_schedule_test"
-STAGE_OLD_TABLE = "stage_old_" + MAIN_TABLE
-STAGE_OLD_VALID_TABLE = "stage_old_valid_" + MAIN_TABLE
+STAGE_KNOWN_TABLE = "stage_known_" + MAIN_TABLE
+STAGE_KNOWN_VALID_TABLE = "stage_known_valid_" + MAIN_TABLE
 STAGE_NEW_TABLE = "stage_new_" + MAIN_TABLE
 STAGE_NEW_ID_TABLE = "stage_new_id_" + MAIN_TABLE
 STAGE_NEW_VALID_TABLE = "stage_new_valid_" + MAIN_TABLE
 
 
 def establish_schedule(cur):
-    # constraint bill_schedule_details covers edge case 1
+    # constraint bill_schedule_aux helps with edge case 1
     create_query = """
         CREATE TABLE IF NOT EXISTS {0}.{1} 
         (
@@ -62,10 +62,12 @@ def stage_known_schedule(cur):
         WHERE event_date >= CURRENT_DATE;
     """
     print("Copying known events")
-    cur.execute(temp_table_query.format(STAGE_OLD_TABLE, LEGTRACKER_SCHEMA, MAIN_TABLE))
+    cur.execute(
+        temp_table_query.format(STAGE_KNOWN_TABLE, LEGTRACKER_SCHEMA, MAIN_TABLE)
+    )
     print(cur.statusmessage)
 
-    copy_temp_table(cur, STAGE_OLD_TABLE)
+    copy_temp_table(cur, STAGE_KNOWN_TABLE)
     return
 
 
@@ -127,7 +129,8 @@ def update_known_events(cur):
         "Preparing to mark events as 'moved' if they don't exist in the current scraper pull"
     )
 
-    old_valid_query = """
+    # Left outer join on known events with the new event batch
+    known_valid_query = """
         CREATE TEMPORARY TABLE {0} AS
         SELECT b.bill_number, a.*
         FROM {1} a
@@ -143,6 +146,10 @@ def update_known_events(cur):
             a.event_room = b.event_room
     """
 
+    # Leverage the blank bill_number column for edge case 5:
+    # when the new event batch does not include overlap with known events,
+    # set the event_status to the implied 'moved'
+    # still leaving logic for event 'revisions' (edge case 2)
     update_query = """
         UPDATE {0} a
         SET event_status='moved'
@@ -160,20 +167,20 @@ def update_known_events(cur):
     """
 
     cur.execute(
-        old_valid_query.format(
-            STAGE_OLD_VALID_TABLE, STAGE_OLD_TABLE, STAGE_NEW_ID_TABLE
+        known_valid_query.format(
+            STAGE_KNOWN_VALID_TABLE, STAGE_KNOWN_TABLE, STAGE_NEW_ID_TABLE
         )
     )
     print("Validate known events by matching them to the current update")
     print(cur.statusmessage)
 
-    cur.execute(update_query.format(STAGE_OLD_TABLE, STAGE_NEW_ID_TABLE))
+    cur.execute(update_query.format(STAGE_KNOWN_VALID_TABLE, STAGE_NEW_ID_TABLE))
     print(
         "If bill number can't be matched to current update, set event status to 'moved'"
     )
     print(cur.statusmessage)
 
-    copy_temp_table(cur, STAGE_OLD_TABLE)
+    copy_temp_table(cur, STAGE_KNOWN_VALID_TABLE)
     return
 
 
@@ -206,7 +213,9 @@ def prune_bill_schedule(cur):
     """
 
     cur.execute(
-        prune_query.format(STAGE_NEW_VALID_TABLE, STAGE_NEW_ID_TABLE, STAGE_OLD_TABLE)
+        prune_query.format(
+            STAGE_NEW_VALID_TABLE, STAGE_NEW_ID_TABLE, STAGE_KNOWN_VALID_TABLE
+        )
     )
     print(cur.statusmessage)
     print("Pruned duplicate events from the set of new events")
@@ -232,12 +241,12 @@ def insert_schedule(cur):
     """
     # insert all valid events
     cur.execute(
-        insert_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE, STAGE_OLD_VALID_TABLE)
+        insert_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE, STAGE_KNOWN_VALID_TABLE)
     )
     print("All known events re-inserted")
     print(cur.statusmessage)
 
-    # # insert the events that were just scraped
+    # insert the events that were just scraped
     cur.execute(
         insert_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE, STAGE_NEW_VALID_TABLE)
     )
@@ -287,13 +296,13 @@ def remove_staging_table(cur):
     """
     cur.execute(drop_query.format(STAGE_NEW_VALID_TABLE))
     print(cur.statusmessage)
-    cur.execute(drop_query.format(STAGE_OLD_VALID_TABLE))
+    cur.execute(drop_query.format(STAGE_KNOWN_VALID_TABLE))
     print(cur.statusmessage)
     cur.execute(drop_query.format(STAGE_NEW_ID_TABLE))
     print(cur.statusmessage)
     cur.execute(drop_query.format(STAGE_NEW_TABLE))
     print(cur.statusmessage)
-    cur.execute(drop_query.format(STAGE_OLD_TABLE))
+    cur.execute(drop_query.format(STAGE_KNOWN_TABLE))
     print(cur.statusmessage)
     return
 
@@ -302,22 +311,22 @@ def legtracker_update(cur, schedule_data, schedule_changes, dev=True):
     # establish that the table exists
     establish_schedule(cur)
 
-    # stage existing events to temp table STAGE_COPY
+    # stage existing events to temp table STAGE_KNOWN
     stage_known_schedule(cur)
 
     # stage new events to a separate temp table STAGE_NEW
     stage_new_schedule(cur, schedule_data)
 
-    # filter and join new events to openstates bill ID, STAGE_ID
+    # filter and join new events to openstates bill ID, STAGE_NEW_ID
     join_filter_ids(cur)
 
-    # update known events STAGE_COPY with STAGE_NEW as ground truth >> STAGE_OLD
+    # update known events STAGE_KNOWN with STAGE_NEW as ground truth >> STAGE_KNOWN_VALID
     update_known_events(cur)
 
-    # truncate main table, prune duplicates between STAGE_ID and STAGE_OLD as ground truth >> STAGE_FINAL
+    # truncate main table, prune duplicates between STAGE_ID and STAGE_KNOWN_VALID as ground truth >> STAGE_NEW_VALID
     prune_bill_schedule(cur)
 
-    # insert STAGE_OLD and STAGE_FINAL
+    # insert STAGE_KNOWN_VALID and STAGE_NEW_VALID
     insert_schedule(cur)
 
     # update known events with event_status IFF changed events are detected from scrape
@@ -332,8 +341,8 @@ def legtracker_update(cur, schedule_data, schedule_changes, dev=True):
 def fetch_schedule_update(dev=False):
     schedule_cache = "{}_schedule.pickle".format((str(date.today())))
     changes_cache = "{}_changes.pickle".format((str(date.today())))
-    # schedule_cache = "2025-04-19_schedule.pickle"
-    # changes_cache = "2025-04-19_changes.pickle"
+    # schedule_cache = "schedule.pickle"
+    # changes_cache = "changes.pickle"
     # Feature dev setting: check if schedule updates have been pickled for use
     if (
         dev and os.path.exists(schedule_cache) and os.path.exists(changes_cache)
