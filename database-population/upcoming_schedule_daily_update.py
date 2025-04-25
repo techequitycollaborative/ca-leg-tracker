@@ -54,7 +54,7 @@ def establish_schedule(cur):
     return
 
 
-def stage_known_schedule(cur):
+def stage_known_schedule(cur, dev):
     # Create staging table for events that are still upcoming
     temp_table_query = """
         CREATE TEMPORARY TABLE {0} AS
@@ -67,11 +67,11 @@ def stage_known_schedule(cur):
     )
     print(cur.statusmessage)
 
-    copy_temp_table(cur, STAGE_KNOWN_TABLE)
+    copy_temp_table(cur, dev, STAGE_KNOWN_TABLE)
     return
 
 
-def stage_new_schedule(cur, schedule_data):
+def stage_new_schedule(cur, schedule_data, dev):
     # Create staging table
     temp_table_query = """
         CREATE TEMPORARY TABLE {0} (
@@ -99,11 +99,11 @@ def stage_new_schedule(cur, schedule_data):
     for row in tqdm(schedule_data):
         cur.execute(insert_query.format(STAGE_NEW_TABLE), tuple(row))
 
-    copy_temp_table(cur, STAGE_NEW_TABLE)
+    copy_temp_table(cur, dev, STAGE_NEW_TABLE)
     return
 
 
-def join_filter_ids(cur):
+def join_filter_ids(cur, dev):
     # Join on bill_number and filter if bill_id is not found
     temp_table_query = """
         CREATE TEMPORARY TABLE {0} AS
@@ -120,11 +120,11 @@ def join_filter_ids(cur):
     print("Joining on Openstates IDs")
     print(cur.statusmessage)
 
-    copy_temp_table(cur, STAGE_NEW_ID_TABLE)
+    copy_temp_table(cur, dev, STAGE_NEW_ID_TABLE)
     return
 
 
-def update_known_events(cur):
+def update_known_events(cur, dev):
     print(
         "Preparing to mark events as 'moved' if they don't exist in the current scraper pull"
     )
@@ -180,11 +180,11 @@ def update_known_events(cur):
     )
     print(cur.statusmessage)
 
-    copy_temp_table(cur, STAGE_KNOWN_VALID_TABLE)
+    copy_temp_table(cur, dev, STAGE_KNOWN_VALID_TABLE)
     return
 
 
-def prune_bill_schedule(cur):
+def prune_bill_schedule(cur, dev):
     # Truncate query
     truncate_query = "TRUNCATE TABLE {0}.{1}"
     # Truncate bill_schedule
@@ -219,7 +219,7 @@ def prune_bill_schedule(cur):
     )
     print(cur.statusmessage)
     print("Pruned duplicate events from the set of new events")
-    copy_temp_table(cur, STAGE_NEW_VALID_TABLE)
+    copy_temp_table(cur, dev, STAGE_NEW_VALID_TABLE)
     return
 
 
@@ -312,19 +312,19 @@ def legtracker_update(cur, schedule_data, schedule_changes, dev=True):
     establish_schedule(cur)
 
     # stage existing events to temp table STAGE_KNOWN
-    stage_known_schedule(cur)
+    stage_known_schedule(cur, dev)
 
     # stage new events to a separate temp table STAGE_NEW
-    stage_new_schedule(cur, schedule_data)
+    stage_new_schedule(cur, schedule_data, dev)
 
     # filter and join new events to openstates bill ID, STAGE_NEW_ID
-    join_filter_ids(cur)
+    join_filter_ids(cur, dev)
 
     # update known events STAGE_KNOWN with STAGE_NEW as ground truth >> STAGE_KNOWN_VALID
-    update_known_events(cur)
+    update_known_events(cur, dev)
 
     # truncate main table, prune duplicates between STAGE_ID and STAGE_KNOWN_VALID as ground truth >> STAGE_NEW_VALID
-    prune_bill_schedule(cur)
+    prune_bill_schedule(cur, dev)
 
     # insert STAGE_KNOWN_VALID and STAGE_NEW_VALID
     insert_schedule(cur)
