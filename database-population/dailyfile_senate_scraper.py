@@ -28,7 +28,7 @@ import scraper_utils
 
 def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=False):
     start_date = datetime.date.today()
-    end_date = start_date + datetime.timedelta(days=30)
+    end_date = start_date + datetime.timedelta(days=15)
     query_url = (
         source_url
         + "?startDate="
@@ -43,6 +43,7 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
 
     floor_session_results = set()
     committee_hearing_results = set()
+    committee_hearing_changes = set()
 
     with sync_playwright() as p:
         browser, page = scraper_utils.make_page(p)
@@ -71,47 +72,56 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
             else:
                 if verbose:
                     print("Looking for events...")
-                # Examine floor session content
-                floor_section = current_wrapper.locator(
-                    "div.dailyfile-section.floor-meetings"
-                ).first  # Assuming Senate DF is only updated day-of
-                scheduled = not floor_section.get_by_text(
-                    "No floor session scheduled."
-                ).is_visible()
 
-                if scheduled:
-                    floor_agenda = floor_section.get_by_role(
-                        "link", name="View Agenda"
-                    ).first  # Assuming we only need first link
-                    scraper_utils.view_agenda(page, floor_agenda)
+                if i == 0:  # Assuming Senate DF is only updated day-of
+                    # Examine floor session content
+                    floor_section = current_wrapper.locator(
+                        "div.dailyfile-section.floor-meetings"
+                    ).first
+                    scheduled = not floor_section.get_by_text(
+                        "No floor session scheduled."
+                    ).is_visible(timeout=1000)
 
-                    agenda_found = not page.get_by_text(
-                        "No Agendas were found."
-                    ).is_visible()
+                    if scheduled:
+                        floor_agenda = floor_section.get_by_role(
+                            "link", name="View Agenda"
+                        ).first  # Assuming we only need first link
+                        scraper_utils.view_agenda(page, floor_agenda)
 
-                    if agenda_found:
-                        # Extract HTML and parse as BeautifulSoup object
-                        content = page.content()
-                        soup = bs(content, "html.parser")
-                        floor_content = soup.select_one("div.agenda-container")
-                        # Parse agenda into actions
-                        floor_actions = floor_content.select("h3")
-                        for a in floor_actions:
+                        agenda_found = not page.get_by_text(
+                            "No Agendas were found."
+                        ).is_visible(timeout=5000)
 
-                            # Extract measures AKA bills to be covered in the floor session and union with existing results
-                            measures = a.find_next_sibling(
-                                "div", class_="agenda-item"
-                            ).select("span.measureLink")
-                            # Update results with set intersection operation on a set of collected bills/measures
-                            floor_session_results = (
-                                floor_session_results
-                                | scraper_utils.collect_measures(
+                        if agenda_found:
+                            print("Floor agenda for {} found".format(current_date))
+                            # Extract HTML and parse as BeautifulSoup object
+                            content = page.content()
+                            soup = bs(content, "html.parser")
+                            floor_content = soup.select_one("div.agenda-container")
+                            # Parse agenda into actions
+                            floor_actions = floor_content.select("h3")
+                            for a in floor_actions:
+
+                                # Extract measures AKA bills to be covered in the floor session and union with existing results
+                                measures = a.find_next_sibling(
+                                    "div", class_="agenda-item"
+                                ).select("span.measureLink")
+                                # Update results with set intersection operation on a set of collected bills/measures
+                                current_events = scraper_utils.collect_measure_info(
                                     current_date, a.text.title(), measures, 2
                                 )
-                            )
-                    # Close agenda pop-up
-                    close_button = page.get_by_role("button", name="Close").first
-                    close_button.click()
+
+                                current_events_detailed = (
+                                    scraper_utils.add_measure_details(
+                                        "", "", "", current_events
+                                    )
+                                )
+                                floor_session_results = (
+                                    floor_session_results | current_events_detailed
+                                )
+                        # Close agenda pop-up
+                        close_button = page.get_by_role("button", name="Close").first
+                        close_button.click()
 
                 # Examine committee hearing content
                 committee_hearing_section = current_wrapper.locator(
@@ -124,24 +134,52 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                     print("Found {} hearings...".format(hearing_elements.count()))
                 # Iterate over individual hearings
                 for j in range(hearing_elements.count()):
+                    # Extract current hearing details
                     current_hearing = hearing_elements.nth(j)
                     current_name = (
                         current_hearing.locator("div.hearing-name").inner_text().title()
                     )
-                    # print("####" * 10)
-                    # print(current_name)
-                    # try:
-                    #     current_details = current_hearing.locator("div.attribute.page-events__time-location").inner_text()
-                    #     print(current_details)
-                    #     current_time, current_loc = current_details.split(" - ")
-                    #     current_time = current_time.replace("Time: ", "")
-                    #     current_location, current_room = current_loc.split(", ")
-                    #     print(current_time)
-                    #     print(current_location)
-                    #     print(current_room)
-                    # except:
-                    #     print("No time or location details could be extraacted...")
+                    # Extract details like time, location, room
+                    try:
+                        current_details = current_hearing.locator(
+                            "div.attribute.page-events__time-location"
+                        ).inner_text()
+                        current_time, current_loc = current_details.split(" - ")
+                        current_time = current_time.replace("Time: ", "")
+                        current_location, current_room = current_loc.split(", ")
+                    except:
+                        print("No time or location details could be extracted...")
+                        continue
 
+                    # Extract hearing notes if available
+                    current_note = (
+                        current_hearing.locator("div.attribute.note")
+                        .inner_text()
+                        .lower()
+                    )
+
+                    if len(current_note) and "change" not in current_note:
+                        temp = (
+                            2,
+                            current_date,
+                            current_name,
+                            current_time,
+                            current_location,
+                            current_room,
+                        )
+                        if "canceled" in current_note:
+                            committee_hearing_changes.add((temp + ("canceled",)))
+                        elif "postponed" in current_note:
+                            committee_hearing_changes.add((temp + ("postponed",)))
+                        else:
+                            print("Unparseable note: {}".format(current_note))
+                            print(
+                                "Hearing details: {0}, {1}".format(
+                                    current_date, current_name
+                                )
+                            )
+
+                    # Extract every bill on the agenda
                     current_agenda = current_hearing.get_by_role(
                         "link", name="View Agenda"
                     )
@@ -154,11 +192,18 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                     measure_selector = soup.select("span.measureLink")
                     if verbose:
                         print("Found {} measures...".format(len(measure_selector)))
+
+                    current_events = scraper_utils.collect_measure_info(
+                        current_date, current_name, measure_selector, 2
+                    )
+
+                    current_events_detailed = scraper_utils.add_measure_details(
+                        current_time, current_location, current_room, current_events
+                    )
+
+                    # Update results with set intersection operation on a set of collected bills/measures
                     committee_hearing_results = (
-                        committee_hearing_results
-                        | scraper_utils.collect_measures(
-                            current_date, current_name, measure_selector, 2
-                        )
+                        committee_hearing_results | current_events_detailed
                     )
 
                     # Close agenda pop-up
@@ -166,7 +211,9 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                     close_button.click()
 
         browser.close()
-    return floor_session_results | committee_hearing_results
+        print("Closed senate browser")
+    final_results = floor_session_results | committee_hearing_results
+    return final_results, committee_hearing_changes
 
 
 def main():
