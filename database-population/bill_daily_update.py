@@ -93,7 +93,7 @@ def openstates_upsert_bills(cur, bills):
     buffer = StringIO()
 
     # Given list of bills fetched from OpenStates, write to buffer
-    bills.to_csv(buffer, index=False, header=False, sep="\t", quoting=csv.QUOTE_NONE)
+    bills.to_csv(buffer, index=False, header=False, sep="\t", quoting=csv.QUOTE_NONE, escapechar="\\")
     buffer.seek(0)
 
     # Bulk insert from buffer to temp table
@@ -116,7 +116,8 @@ def openstates_upsert_bills(cur, bills):
             abstract=EXCLUDED.abstract
     """
     cur.execute(update_bills_query.format(OPENSTATES_SCHEMA, temp_table_name))
-
+    print("Snapshot upsert main bill table")
+    print(cur.statusmessage)
 
 def openstates_update_bill_data(
     cur, bill_list=[], bill_actions=[], bill_sponsors=[], bill_votes=[]
@@ -171,9 +172,13 @@ def openstates_update_bill_data(
         DELETE FROM {0}.{1}
         WHERE openstates_bill_id IN ({2})
     """
+    print("Delete old actions, sponsor, vote snapshots")
     cur.execute(delete_query.format(OPENSTATES_SCHEMA, bill_action, bill_ids_string))
+    print(cur.statusmessage)
     cur.execute(delete_query.format(OPENSTATES_SCHEMA, bill_sponsor, bill_ids_string))
+    print(cur.statusmessage)
     cur.execute(delete_query.format(OPENSTATES_SCHEMA, bill_vote, bill_ids_string))
+    print(cur.statusmessage)
 
     # Copy new data to live tables
     update_data_query = """
@@ -181,17 +186,21 @@ def openstates_update_bill_data(
         SELECT *
         FROM {2}
     """
+    print("Update actions, sponsor, vote snapshots with new data")
     cur.execute(
         update_data_query.format(OPENSTATES_SCHEMA, bill_action, bill_action + "_temp")
     )
+    print(cur.statusmessage)
     cur.execute(
         update_data_query.format(
             OPENSTATES_SCHEMA, bill_sponsor, bill_sponsor + "_temp"
         )
     )
+    print(cur.statusmessage)
     cur.execute(
         update_data_query.format(OPENSTATES_SCHEMA, bill_vote, bill_vote + "_temp")
     )
+    print(cur.statusmessage)
 
 
 def get_buffer(df):
@@ -373,13 +382,23 @@ def legtracker_update(cur, updated_since, force_update=False):
     count_result = cur.fetchone()
     snapshot_count = count_result[0]
     print("Retrieved {0} rows from Openstates snapshot...".format(snapshot_count))
+    print("Updating frontend bill tables")
+    cur.execute(truncate_query.format(LEGTRACKER_SCHEMA, "bill"))
+    print(cur.statusmessage)
     cur.execute(bill_query.format(LEGTRACKER_SCHEMA, OPENSTATES_SCHEMA, stamp))
+    print(cur.statusmessage)
 
     # Clear and rebuild bill history and votes tables
+    print("Flush out bill history and chamber votes")
     cur.execute(truncate_query.format(LEGTRACKER_SCHEMA, "bill_history"))
+    print(cur.statusmessage)
     cur.execute(truncate_query.format(LEGTRACKER_SCHEMA, "chamber_vote_result"))
+    print(cur.statusmessage)
+    print ("Rebuild bill history, chamber votes")
     cur.execute(bill_history_query.format(LEGTRACKER_SCHEMA, OPENSTATES_SCHEMA))
+    print(cur.statusmessage)
     cur.execute(bill_vote_query.format(LEGTRACKER_SCHEMA, OPENSTATES_SCHEMA))
+    print(cur.statusmessage)
 
 
 def get_last_update_timestamp(cur):
