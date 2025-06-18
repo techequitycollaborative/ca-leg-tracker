@@ -28,6 +28,9 @@ LAST_UPDATED_DEFAULT = "2000-01-01T00:00:00"
 # Define columns for OpenStates API requests
 PEOPLE_COLUMNS = ["openstates_people_id", "name", "party", "updated_at"]
 ROLE_COLUMNS = ["openstates_people_id", "org_classification", "district"]
+OFFICE_COLUMNS = ["openstates_people_id", "name", "phone", "address", "classification"]
+NAME_COLUMNS = ["openstates_people_id", "alt_name"]
+SOURCE_COLUMNS = ["openstates_people_id", "source_url"]
 # COMMITTEE_COLUMNS = ['openstates_committee_id', 'name', 'webpage_link']
 # MEMBERSHIP_COLUMNS = ['openstates_committee_id', 'openstates_people_id', 'role']
 
@@ -139,9 +142,56 @@ def openstates_upsert_people(cur, people):
     cur.execute(update_people_query.format(OPENSTATES_SCHEMA, temp_table_name))
     return
 
+def load_from_buffer(cur, df, table_name, table_columns):
+    cur.copy_from(
+        file=get_buffer(df),
+        table=table_name + "_temp",
+        sep="\t",
+        columns=table_columns
+    )
+    return
 
-def openstates_update_people_data(cur, people_list=[], people_roles=[]):
-    table_name = "people_roles"
+def flush_table(cur, table_name, people_id_string):
+    delete_query = """
+        DELETE FROM {0}.{1}
+        WHERE openstates_people_id IN ({2})
+    """
+    print("Delete old {} snapshot".format(table_name))
+    cur.execute(delete_query.format(OPENSTATES_SCHEMA, table_name, people_id_string))
+    print(cur.statusmessage)
+    return
+
+def insert_from_temp(cur, table_name, table_columns):
+    update_data_query = """
+        INSERT INTO {0}.{1} ({2})
+        SELECT {2}
+        FROM {3}
+    """
+    cur.execute(
+        update_data_query.format(
+            OPENSTATES_SCHEMA, 
+            table_name,
+            ", ".join(table_columns), 
+            table_name + "_temp"
+        )
+    )
+    print(cur.statusmessage)
+    return
+
+def openstates_update_people_data(
+        cur, 
+        people_list=[], 
+        people_role_data=[],
+        people_office_data=[],
+        people_name_data=[],
+        people_source_data=[]
+        ):
+    
+    # Temp table names
+    people_roles = "people_roles"
+    people_offices = "people_offices"
+    people_names = "people_names"
+    people_sources = "people_sources"
 
     temp_table_query = """
         CREATE TEMPORARY TABLE {0}_temp AS
@@ -149,30 +199,38 @@ def openstates_update_people_data(cur, people_list=[], people_roles=[]):
         FROM {1}.{0}
         WHERE false
     """
-    cur.execute(temp_table_query.format(table_name, OPENSTATES_SCHEMA))
+    # Create temporary tables
+    print("Creating temporary tables...")
+    cur.execute(temp_table_query.format(people_roles, OPENSTATES_SCHEMA))
+    print(cur.statusmessage)
+    cur.execute(temp_table_query.format(people_offices, OPENSTATES_SCHEMA))
+    print(cur.statusmessage)
+    cur.execute(temp_table_query.format(people_names, OPENSTATES_SCHEMA))
+    print(cur.statusmessage)
+    cur.execute(temp_table_query.format(people_sources, OPENSTATES_SCHEMA))
+    print(cur.statusmessage)
 
-    cur.copy_from(
-        file=get_buffer(people_roles),
-        table=table_name + "_temp",
-        sep="\t",
-        columns=ROLE_COLUMNS,
-    )
+    # Load new data
+    print("Loading data from buffer...")
+    load_from_buffer(cur, people_role_data, people_roles, ROLE_COLUMNS)
+    load_from_buffer(cur, people_office_data, people_offices, OFFICE_COLUMNS)
+    load_from_buffer(cur, people_name_data, people_names, NAME_COLUMNS)
+    load_from_buffer(cur, people_source_data, people_sources, SOURCE_COLUMNS)
 
+    # Flush old data
+    print("Flushing old data from tables...")
     people_id_string = "'" + "','".join(people_list) + "'"
-    delete_query = """
-        DELETE FROM {0}.{1}
-        WHERE openstates_people_id IN ({2})
-    """
-    cur.execute(delete_query.format(OPENSTATES_SCHEMA, table_name, people_id_string))
+    flush_table(cur, people_roles, people_id_string)
+    flush_table(cur, people_offices, people_id_string)
+    flush_table(cur, people_names, people_id_string)
+    flush_table(cur, people_sources, people_id_string)
 
-    update_data_query = """
-        INSERT INTO {0}.{1}
-        SELECT *
-        FROM {2}
-    """
-    cur.execute(
-        update_data_query.format(OPENSTATES_SCHEMA, table_name, table_name + "_temp")
-    )
+    # Insert new rows
+    print("Updating tables with new data")
+    insert_from_temp(cur, people_roles, ROLE_COLUMNS)
+    insert_from_temp(cur, people_offices, OFFICE_COLUMNS)
+    insert_from_temp(cur, people_names, NAME_COLUMNS)
+    insert_from_temp(cur, people_sources, SOURCE_COLUMNS)
     return
 
 
@@ -194,70 +252,86 @@ def get_last_update_timestamp(cur):
     return last_updated
 
 
-def fetch_legislator_updates(
-    updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_page=1
+def update_df(df, new_data, table_columns):
+    df = pd.concat(
+            [
+                df,
+                pd.DataFrame(data=new_data, columns=table_columns),
+            ],
+            ignore_index=True,
+        )
+    return df
+
+def fetch_chamber_update(
+        chamber_name,
+        updated_since=LAST_UPDATED_DEFAULT,
+        max_page=1000,
+        start_page=1
 ):
     df_people = pd.DataFrame(columns=PEOPLE_COLUMNS)
     df_people_roles = pd.DataFrame(columns=ROLE_COLUMNS)
+    df_people_offices = pd.DataFrame(columns=OFFICE_COLUMNS)
+    df_people_names = pd.DataFrame(columns=NAME_COLUMNS)
+    df_people_sources = pd.DataFrame(columns=SOURCE_COLUMNS)
 
     current_page = start_page - 1
     num_pages = start_page
 
     while current_page < num_pages and current_page < max_page:
-        current_page += 1  # increment index
-        assembly_data, num_pages = people.get_assembly_data(
-            page=current_page, updated_since=updated_since
-        )
-        print(
-            f"Finished fetching page {current_page} of {num_pages} of assembly updates"
-        )
-
-        df_people = pd.concat(
-            [
-                df_people,
-                pd.DataFrame(data=assembly_data["people"], columns=PEOPLE_COLUMNS),
-            ],
-            ignore_index=True,
-        )
-        df_people_roles = pd.concat(
-            [
-                df_people_roles,
-                pd.DataFrame(data=assembly_data["people_roles"], columns=ROLE_COLUMNS),
-            ],
-            ignore_index=True,
-        )
-
-    current_page = start_page - 1
-    num_pages = start_page
-
-    while current_page < num_pages and current_page < max_page:
-        current_page += 1  # increment index
-        senate_data, num_pages = people.get_senate_data(
-            page=current_page, updated_since=updated_since
-        )
-        print(
-            "Finished fetching page {} of {} of senate updates".format(
-                current_page, num_pages
+        current_page += 1 # increment
+        if chamber_name == "assembly":
+            chamber_data, num_pages = people.get_assembly_data(
+                page=current_page, 
+                updated_since=updated_since
             )
-        )
+            print(
+                f"Finished fetching page {current_page} of {num_pages} of assembly updates"
+            )
+        else:
+            chamber_data, num_pages = people.get_senate_data(
+                page=current_page, 
+                updated_since=updated_since
+            )
+            print(
+                f"Finished fetching page {current_page} of {num_pages} of senate updates"
+            )
+        
+        # Update dataframes
+        df_people = update_df(df_people, chamber_data["people"], table_columns=PEOPLE_COLUMNS)
+        df_people_roles = update_df(df_people_roles, chamber_data["people_roles"], table_columns=ROLE_COLUMNS)
+        df_people_offices = update_df(df_people_offices, chamber_data["people_offices"], table_columns=OFFICE_COLUMNS)
+        df_people_names = update_df(df_people_names, chamber_data["people_names"], table_columns=NAME_COLUMNS)
+        df_people_sources = update_df(df_people_sources, chamber_data["people_sources"], table_columns=SOURCE_COLUMNS)
+    
+    return {
+        "people": df_people, 
+        "people_roles": df_people_roles,
+        "people_offices": df_people_offices,
+        "people_names": df_people_names,
+        "people_sources": df_people_sources
+        }
 
-        df_people = pd.concat(
-            [
-                df_people,
-                pd.DataFrame(data=senate_data["people"], columns=PEOPLE_COLUMNS),
-            ],
-            ignore_index=True,
+def fetch_legislator_updates(updated_since=LAST_UPDATED_DEFAULT):
+    # Get each chamber's updates
+    assembly_update = fetch_chamber_update(
+        "assembly", 
+        updated_since=updated_since
         )
-        df_people_roles = pd.concat(
-            [
-                df_people_roles,
-                pd.DataFrame(data=senate_data["people_roles"], columns=ROLE_COLUMNS),
-            ],
-            ignore_index=True,
-        )
-
-    return {"people": df_people, "people_roles": df_people_roles}
-
+    
+    senate_update = fetch_chamber_update(
+        "senate",
+        updated_since=updated_since
+    )
+    
+    # Concat together the updates
+    results = {}
+    for k in assembly_update.keys():
+        curr = pd.concat([assembly_update[k], senate_update[k]])
+        assert type(curr) == pd.DataFrame
+        results[k] = curr
+    
+    # Final results
+    return results
 
 # def openstates_upsert_committee_data(cur, committees):
 #     temp_table_name = 'committees_temp'
@@ -358,9 +432,11 @@ def main():
                 print("Skipping forced refresh -- no legislators to update; finishing.")
         else:
 
-            # Logs new bills to console
-            print(legislator_updates["people"])
-            print(legislator_updates["people_roles"])
+            # Logs new information to console
+            for k in legislator_updates:
+                print(k)
+                print(legislator_updates[k])
+                print()
             print("Openstates response received. Updating Openstates snapshot...")
 
             # Upserts new bills and new bill content into Openstates/snapshot schema
@@ -370,7 +446,10 @@ def main():
             openstates_update_people_data(
                 cur=cur,
                 people_list=legislator_updates["people"]["openstates_people_id"],
-                people_roles=legislator_updates["people_roles"],
+                people_role_data=legislator_updates["people_roles"],
+                people_office_data=legislator_updates["people_offices"],
+                people_name_data=legislator_updates["people_names"],
+                people_source_data=legislator_updates["people_sources"]
             )
             print("Legislator snapshot updated")
 

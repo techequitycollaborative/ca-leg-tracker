@@ -26,11 +26,11 @@ BASE_PARAMS = {
 }
 ASSEMBLY_PARAMS = {
     "org_classification": "lower",
-    "include": ["other_names", "other_identifiers", "links"],
+    "include": ["other_names", "links", "offices", "sources"],
 }
 SENATE_PARAMS = {
     "org_classification": "upper",
-    "include": ["other_names", "other_identifiers", "links"],
+    "include": ["other_names", "links", "offices", "sources"],
 }
 
 
@@ -39,8 +39,12 @@ def process_legislator_json(data, last_update):
     Input: JSON data, update timestamp
     Output: dictionary of strings mapped to nested lists
     """
-    people = []
-    people_roles = []
+    people = [] # core person data
+    people_roles = [] # correpsonding role and metadata
+    people_offices = [] # corresponding office metadata
+    people_names = [] # corresponding alternate names
+    people_sources = [] # corresponding primary sources
+
     for next_person in data:
         if next_person["updated_at"] == last_update:
             continue
@@ -51,17 +55,59 @@ def process_legislator_json(data, last_update):
         person.append(next_person["name"])
         person.append(next_person["party"])
         person.append(next_person["updated_at"])
+        # Update list
+        people.append(person)
 
         # process people roles
         role = []
         role.append(next_person["id"])
         role.append(next_person["current_role"]["org_classification"])
-        role.append(int(next_person["current_role"]["district"]))
-
-        people.append(person)
+        role.append(next_person["current_role"]["district"])
+        # Update list
         people_roles.append(role)
 
-    return {"people": people, "people_roles": people_roles}
+        # process office data
+        for next_office in next_person["offices"]: 
+            office = []
+            # Openstates people ID
+            office.append(next_person["id"])
+            # Official name
+            office.append(next_office["name"])
+            # Phone number
+            office.append(next_office["voice"])
+            # Street address and room
+            office.append(next_office["address"])
+            # classification
+            office.append(next_office["classification"])
+            # Update list
+            people_offices.append(office)
+
+        # process name data
+        for next_name in next_person["other_names"]:
+            name = []
+            # Openstates people ID
+            name.append(next_person["id"])
+            # Alternate name
+            name.append(next_name["name"])
+            # Update list
+            people_names.append(name)
+        
+        for next_source in next_person["sources"]:
+            source = []
+            # Openstates people ID
+            source.append(next_person["id"])
+            # Info source URL
+            source.append(next_source["url"])
+            # Update list
+            people_sources.append(source)
+
+    return {
+        "people": people, 
+        "people_roles": people_roles,
+        "people_offices": people_offices,
+        "people_names": people_names,
+        "people_sources": people_sources
+    }
 
 
 def fetch_assembly_batch(page, updated_since):
