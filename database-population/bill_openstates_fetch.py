@@ -8,10 +8,10 @@ import json
 from config import config
 from time import sleep
 import requests
-
+import re
 
 # Global constants
-
+RESOLUTION_IDENTIFIER = re.compile("^.+R")
 ENDPOINTS = {"bills": "https://v3.openstates.org/bills"}
 WAIT_TIME = 10  # openstates has a rate limit of 6 requests/minute
 BASE_PARAMS = {
@@ -45,9 +45,11 @@ def process_bill_json(data, last_update):
     bill_votes = []
 
     for next_bill in data:
-        if next_bill["updated_at"] == last_update:
-            continue
+        duplicate = next_bill["updated_at"] == last_update
+        resolution = re.search(RESOLUTION_IDENTIFIER, next_bill["identifier"]) != None
 
+        if duplicate or resolution:
+            continue
         # process bill data
         bill = []
         bill.append(next_bill["id"])
