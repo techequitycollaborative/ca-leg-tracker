@@ -17,6 +17,7 @@ from datetime import datetime
 from io import StringIO
 import csv
 import people_openstates_fetch as people
+import capitol_codex_scraper as codex
 from text_utils import transform_name
 
 # Index into credentials.ini for DB schema names
@@ -31,6 +32,7 @@ ROLE_COLUMNS = ["openstates_people_id", "org_classification", "district"]
 OFFICE_COLUMNS = ["openstates_people_id", "name", "phone", "address", "classification"]
 NAME_COLUMNS = ["openstates_people_id", "alt_name"]
 SOURCE_COLUMNS = ["openstates_people_id", "source_url"]
+CONTACTS_COLUMNS = ["openstates_people_id", "staffer_contact", "generated_email", "issue_area", "staffer_type"]
 # COMMITTEE_COLUMNS = ['openstates_committee_id', 'name', 'webpage_link']
 # MEMBERSHIP_COLUMNS = ['openstates_committee_id', 'openstates_people_id', 'role']
 
@@ -333,6 +335,22 @@ def fetch_legislator_updates(updated_since=LAST_UPDATED_DEFAULT):
     # Final results
     return results
 
+def fetch_codex_updates():
+    assembly_update = codex.extract_contacts("asm")
+    senate_update = codex.extract_contacts("sen")
+
+    # Concat together the updates from each chamber
+    all_issues = set(assembly_update.keys()) | set(senate_update.keys())
+    results = dict()
+
+    for issue in all_issues:
+        asm_df = assembly_update.get(issue, pd.DataFrame())
+        sen_df = senate_update.get(issue, pd.DataFrame())
+        results[issue] = pd.concat([asm_df, sen_df], ignore_index=True)
+    
+    # Final results
+    return results
+
 # def openstates_upsert_committee_data(cur, committees):
 #     temp_table_name = 'committees_temp'
 #     temp_table_query = """
@@ -384,6 +402,63 @@ def fetch_legislator_updates(updated_since=LAST_UPDATED_DEFAULT):
 #         'committee_membership': df_committee_membership
 #     }
 
+def codex_upsert_contacts(
+        cur,
+        contact_data
+):
+    temp_table_name = "contacts_temp"
+    temp_table_query = """
+        CREATE TEMPORARY TABLE {0} (
+        district_number INT,
+        staffer_contact TEXT,
+        generated_email TEXT,
+        issue_area TEXT,
+        staffer_type TEXT
+        )
+    """  # specifying columns because they differ from the final people_contacts table
+    
+    cur.execute(temp_table_query.format(temp_table_name, OPENSTATES_SCHEMA))
+
+    # Insert contacts collected for each issue to the staging table
+    for issue, df in contact_data.items():
+        print(f"Processing {issue}...")
+        if df.empty:
+            print(f"Skipping {issue} (empty DataFrame)")
+            continue
+
+        try:
+            buffer = StringIO()
+
+            df.to_csv(buffer, index=False, header=False, sep="\t", quoting=csv.QUOTE_NONE, escapechar='\\')
+            buffer.seek(0)
+
+            cur.copy_expert(
+                sql="COPY {0} FROM STDIN WITH (FORMAT CSV, DELIMITER E'\t')".format(temp_table_name),
+                file=buffer
+                )
+            print(f"Staged {len(df)} rows for {issue}")
+        except Exception as e:
+                print(f"[CONTACTS] ERROR processing {issue}: {str(e)}")                
+        finally:
+            buffer.close()
+    
+    # Final bulk insert
+    print("Inserting from temp to final table...")
+
+    insert_query = """
+        INSERT INTO {0}.people_contacts (openstates_people_id, staffer_contact, generated_email, issue_area, staffer_type)
+        SELECT 
+            pr.openstates_people_id,
+            t.staffer_contact,
+            t.generated_email,
+            t.issue_area,
+            t.staffer_type
+        FROM {1} t
+        JOIN {0}.people_roles pr ON t.district_number = pr.district
+    """
+    cur.execute(insert_query.format(OPENSTATES_SCHEMA, temp_table_name))
+    print(cur.statusmessage)
+    return
 
 def main():
     # argument parser detects optional flags
@@ -416,8 +491,11 @@ def main():
             + datetime.now().strftime("%Y-%m-%d, %H:%M:%S")
             + " -- fetching updates from Openstates"
         )
+
+        # GET ALL DATA
         legislator_updates = fetch_legislator_updates(last_update)
         # committee_updates = fetch_committee_updates(last_update)
+        contact_updates = fetch_codex_updates()
 
         print("Summary of legislators being updated:")
 
@@ -451,15 +529,22 @@ def main():
                 people_name_data=legislator_updates["people_names"],
                 people_source_data=legislator_updates["people_sources"]
             )
+
+            # Update staffer contact info
+            codex_upsert_contacts(
+                cur=cur,
+                contact_data=contact_updates
+            )
             print("Legislator snapshot updated")
 
             # # Updates legislator table
             print("Updating legtracker tables")
             legtracker_update(cur, last_update, force_update=args.force_update)
         conn.commit()
-
-    except (Exception, psycopg2.DatabaseError) as error:
-        print("Failed to update records", error)
+    except psycopg2.Error as e:
+        print(f"[MAIN] Database error: {e.pgerror}")
+    except Exception as e:
+        print(f"[MAIN] Operation failed: {str(e)}")
     finally:
         if conn is not None:
             conn.close()
