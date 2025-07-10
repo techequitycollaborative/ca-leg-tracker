@@ -11,12 +11,12 @@ SHEET_LINKS = {
 
 KEYWORDS_TO_SKIP = {"VICE CHAIR", "CHAIR", "By issue area"} 
 
-SEPARATORS = ["\+", "/", "&", ",", " and ", ";"]
+SEPARATORS = ["\+", "/", "&", ",", " and ", ";", "\\n"]
 
 def build_sheet_url(source_url: str) -> str:
     return source_url.replace("edit?", "export?format=csv&")
 
-def scrape_clean_sheet(chamber: str, verbose=False) -> pd.DataFrame:
+def scrape_clean_sheet(chamber: str) -> pd.DataFrame:
     ### SCRAPE
     # redirect edit mode into export mode
     source = build_sheet_url(SHEET_LINKS[chamber])

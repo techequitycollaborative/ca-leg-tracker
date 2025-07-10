@@ -336,20 +336,14 @@ def fetch_legislator_updates(updated_since=LAST_UPDATED_DEFAULT):
     return results
 
 def fetch_codex_updates():
+    print("Extracting current Capitol Codex data...")
     assembly_update = codex.extract_contacts("asm")
     senate_update = codex.extract_contacts("sen")
 
-    # Concat together the updates from each chamber
-    all_issues = set(assembly_update.keys()) | set(senate_update.keys())
-    results = dict()
-
-    for issue in all_issues:
-        asm_df = assembly_update.get(issue, pd.DataFrame())
-        sen_df = senate_update.get(issue, pd.DataFrame())
-        results[issue] = pd.concat([asm_df, sen_df], ignore_index=True)
-    
-    # Final results
-    return results
+    return {
+        "lower": assembly_update,
+        "upper": senate_update
+    }
 
 # def openstates_upsert_committee_data(cur, committees):
 #     temp_table_name = 'committees_temp'
@@ -404,10 +398,12 @@ def fetch_codex_updates():
 
 def codex_upsert_contacts(
         cur,
-        contact_data
+        contact_data,
+        chamber
 ):
     temp_table_name = "contacts_temp"
     temp_table_query = """
+        DROP TABLE IF EXISTS {0};
         CREATE TEMPORARY TABLE {0} (
         district_number INT,
         staffer_contact TEXT,
@@ -454,9 +450,9 @@ def codex_upsert_contacts(
             t.issue_area,
             t.staffer_type
         FROM {1} t
-        JOIN {0}.people_roles pr ON t.district_number = pr.district
+        JOIN {0}.people_roles pr ON t.district_number = pr.district AND pr.org_classification='{2}'
     """
-    cur.execute(insert_query.format(OPENSTATES_SCHEMA, temp_table_name))
+    cur.execute(insert_query.format(OPENSTATES_SCHEMA, temp_table_name, chamber))
     print(cur.statusmessage)
     return
 
@@ -531,10 +527,12 @@ def main():
             )
 
             # Update staffer contact info
-            codex_upsert_contacts(
-                cur=cur,
-                contact_data=contact_updates
-            )
+            for chamber in contact_updates.keys():
+                codex_upsert_contacts(
+                    cur=cur,
+                    contact_data=contact_updates[chamber],
+                    chamber=chamber
+                )
             print("Legislator snapshot updated")
 
             # # Updates legislator table
