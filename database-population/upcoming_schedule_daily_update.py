@@ -13,7 +13,6 @@ import psycopg2
 import pickle
 import os
 from tqdm import tqdm
-from datetime import date
 from db_utils import copy_temp_table
 
 LEGTRACKER_SCHEMA = config("postgresql_schemas")["legtracker_schema"]
@@ -21,7 +20,7 @@ SNAPSHOT_SCHEMA = config("postgresql_schemas")["snapshot_schema"]
 CURRENT_SESSION = "20252026"
 
 # global vars for table names used across stages
-MAIN_TABLE = "bill_schedule_test"
+MAIN_TABLE = "bill_schedule"
 STAGE_KNOWN_TABLE = "stage_known_" + MAIN_TABLE
 STAGE_KNOWN_VALID_TABLE = "stage_known_valid_" + MAIN_TABLE
 STAGE_NEW_TABLE = "stage_new_" + MAIN_TABLE
@@ -339,10 +338,8 @@ def legtracker_update(cur, schedule_data, schedule_changes, dev=True):
 
 
 def fetch_schedule_update(dev=False):
-    schedule_cache = "{}_schedule.pickle".format((str(date.today())))
-    changes_cache = "{}_changes.pickle".format((str(date.today())))
-    # schedule_cache = "schedule.pickle"
-    # changes_cache = "changes.pickle"
+    schedule_cache = "schedule.pickle"
+    changes_cache = "changes.pickle"
     # Feature dev setting: check if schedule updates have been pickled for use
     if (
         dev and os.path.exists(schedule_cache) and os.path.exists(changes_cache)

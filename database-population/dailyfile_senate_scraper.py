@@ -21,34 +21,23 @@ bills into a utils function, which returns a set of tuples in the shape (DATE, E
 """
 
 from bs4 import BeautifulSoup as bs
-import datetime
-from playwright.sync_api import sync_playwright
 import scraper_utils
 
 
 def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=False):
-    start_date = datetime.date.today()
-    end_date = start_date + datetime.timedelta(days=15)
-    query_url = (
-        source_url
-        + "?startDate="
-        + start_date.strftime("%Y-%m-%d")
-        + "&endDate="
-        + end_date.strftime("%Y-%m-%d")
-        + "&floorMeetings=1&committeeHearings=1"
-    )
+    # Generate start and end dates for a query on the Senate calendar
+    start_date, end_date, query_url = scraper_utils.get_start_end_query(source_url)
     if verbose:
-        print("Querying for events from {} to {}".format(start_date, end_date))
+        print("Querying for Senate events from {} to {}".format(start_date, end_date))
         print(query_url)
 
     floor_session_results = set()
     committee_hearing_results = set()
     committee_hearing_changes = set()
 
-    with sync_playwright() as p:
-        browser, page = scraper_utils.make_page(p)
-        page.goto(query_url)
-
+     # Try connecting to page
+    try:
+        browser, page, handler = scraper_utils.make_page(query_url)
         # iterate over date wrapper blocks
         page.wait_for_selector("div.page-events--day-wrapper")
         if verbose:
@@ -56,6 +45,7 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
         wrappers = page.locator("div.page-events--day-wrapper")
         wrapper_count = wrappers.count()
 
+        print("Preparing to scrape Senate Daily File...")
         for i in range(wrapper_count):
             # Extract current date
             current_wrapper = wrappers.nth(i)
@@ -211,10 +201,23 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                     close_button.click()
 
         browser.close()
-        print("Closed senate browser")
-    final_results = floor_session_results | committee_hearing_results
-    return final_results, committee_hearing_changes
+        print("Closed Senate browser")
+        
+        # Concatenate the results into a set
+        final_results = floor_session_results | committee_hearing_results
+        return final_results, committee_hearing_changes
 
+    except Exception as e:
+        print(f"[SEN] Daily File scrape failed: {e}")
+        return None
+    finally:
+        if page:
+            page.close()
+        if browser:
+            browser.close()
+        if handler:
+            handler.stop()
+    
 
 def main():
     scrape_dailyfile()

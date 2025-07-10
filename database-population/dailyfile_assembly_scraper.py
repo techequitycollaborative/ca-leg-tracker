@@ -22,9 +22,6 @@ bills into a utils function, which returns a set of tuples in the shape (DATE, E
 """
 
 from bs4 import BeautifulSoup as bs
-from dateutil import parser
-from datetime import date
-from playwright.sync_api import sync_playwright
 import scraper_utils
 
 
@@ -37,11 +34,10 @@ def scrape_dailyfile(
     committee_hearing_results = set()
     committee_hearing_changes = set()
 
-    # Open playwright handler
-    with sync_playwright() as p:
-        browser, page = scraper_utils.make_page(p)
-        page.goto(url)
-
+    # Try connecting to page
+    try:
+        browser, page, handler = scraper_utils.make_page(url)
+        print("Preparing to scrape Assembly Daily File...")
         # Find floor session "View Agenda" button and click it to fetch floor session data
         floor_session_agenda = page.get_by_role("link", name="View Agenda").first
         scraper_utils.view_agenda(page, floor_session_agenda)
@@ -92,7 +88,6 @@ def scrape_dailyfile(
                         )
 
             else:  # Committee hearing data is preloaded, no simulated clicks/fetching needed
-                # TODO: implement out postpone cancelled edge case
                 # Extract event text/description
                 hearing_description = section.select_one("div.header").text.title()
 
@@ -112,6 +107,7 @@ def scrape_dailyfile(
                             hearing_description, hearing_time_location
                         )
                     )
+                    # TODO: define behavior for hearings not held at the Capitol
                     continue  # Ignore this whole event if not all details can be found
 
                 # Extract event date from the most recent h5 element
@@ -177,11 +173,21 @@ def scrape_dailyfile(
         browser.close()
         print("Assembly browser closed")
 
-    # Return the intersection of both sets as the total set of all evenets
-    final_results = floor_session_results | committee_hearing_results
+        # Return the intersection of both sets as the total set of all evenets
+        final_results = floor_session_results | committee_hearing_results
 
-    return final_results, committee_hearing_changes
+        return final_results, committee_hearing_changes
 
+    except Exception as e:
+        print(f"[ASM] Daily File scrape failed: {e}")
+        return None
+    finally:
+        if page:
+            page.close()
+        if browser:
+            browser.close()
+        if handler:
+            handler.stop()
 
 def main():
     scrape_dailyfile(verbose=True)

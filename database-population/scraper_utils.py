@@ -3,11 +3,32 @@ General functions for Daily File scraper programs
 """
 
 from bs4 import BeautifulSoup as bs
+from playwright.sync_api import sync_playwright
 from dateutil import parser
+import datetime
 import urllib.request
+import random
+from time import sleep
 
-ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36 Edg/116.0.1938.81"
+USERAGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'
+]
 
+def get_start_end_query(source_url):
+    start_date = datetime.date.today()
+    end_date = start_date + datetime.timedelta(days=15)
+    query_url = (
+        source_url
+        + "?startDate="
+        + start_date.strftime("%Y-%m-%d")
+        + "&endDate="
+        + end_date.strftime("%Y-%m-%d")
+        + "&floorMeetings=1&committeeHearings=1"
+    )
+    return start_date, end_date, query_url
 
 def text_to_date_string(s):
     """
@@ -88,12 +109,76 @@ def view_agenda(page, link):
     return
 
 
-def make_page(p):
-    browser = p.chromium.launch()
-    context = browser.new_context(user_agent=ua)
-    page = context.new_page()
-    assert page.evaluate("navigator.userAgent") == ua
-    return browser, page
+def make_page(url, max_retries=3, timeout=30000):
+    """
+    Args:
+        url: target webpage
+        max_retries: number of times to retry connection with the same agent
+        timeout: max buffer time before retrying connection
+    Returns:
+        Tuple of (browser, page) if successful
+    Raises:
+        Exception: If all user agents fail
+    """
+    # Shuffle possible agents
+    shuffled_agents = USERAGENTS.copy()
+    random.shuffle(shuffled_agents)
+
+    # Rotate through agents until successful connection
+    for user_agent in shuffled_agents:
+        for attempt in range(max_retries):
+            browser = None
+            try:
+                # Initialize Playwright handler
+                # with sync_playwright() as p:
+                handler = sync_playwright().start()
+                browser = handler.chromium.launch()
+                # User agent, viewport, locale to avoid detection
+                context = browser.new_context(
+                    user_agent=user_agent,
+                    viewport={"width": 1280, "height": 720},
+                    locale="en-US"
+                    )
+                page = context.new_page()
+                assert page.evaluate("navigator.userAgent") == user_agent
+                page.set_default_timeout(timeout)
+
+                # Randomized delay
+                delay = random.uniform(0.5, 3)
+                print(f"Attempt {attempt+1}: Delay {delay:.2f}s ({user_agent[:30]}...)")
+                sleep(delay)
+
+                # Attempt navigation
+                response = page.goto(
+                    url,
+                    wait_until="networkidle",
+                    referer="https://www.google.com"
+                )
+                # Log error if not successful
+                if not response.ok:
+                    raise Exception(f"HTTP {response.status}")
+                
+                # Log success and return
+                print(f"Success with user agent: {user_agent[:50]}...")
+                return browser, page, handler
+                
+            except TimeoutError:
+                print(f"Attempt {attempt + 1}/{max_retries} failed with UA: {user_agent[:50]}...")
+                if browser:
+                    browser.close()
+                if attempt == max_retries - 1:
+                    print(f"Max retries reached for this UA, trying next...")
+                continue
+            except Exception as e:
+                print(f"Attempt {attempt} failed ({user_agent[:30]}...): {str(e)[:100]}")
+                if browser:
+                    browser.close()
+                if handler:
+                    handler.stop()
+                if attempt == max_retries:
+                    print(f"Exhausted retries for agent: {user_agent[:30]}...")
+    
+    raise Exception("All user agents failed")
 
 
 def make_static_soup(page, tag_pattern, make_request=True):
