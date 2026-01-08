@@ -22,8 +22,7 @@ import csv
 from datetime import datetime
 
 # Index into credentials.ini for DB schema names
-OPENSTATES_SCHEMA = config("postgresql_schemas")["openstates_schema"]
-LEGTRACKER_SCHEMA = config("postgresql_schemas")["legtracker_schema"]
+SNAPSHOT_SCHEMA = config("postgresql_schemas")["snapshot_schema"]
 
 LAST_UPDATED_DEFAULT = "2000-01-01T00:00:00"
 
@@ -75,10 +74,10 @@ def openstates_upsert_bills(cur, bills):
     Output: None (creates temporary CSV and executes SQL queries)
 
     After writing all new bills to a temp CSV file, use temp SQL table to upsert live bills table
-    in the OPENSTATES_SCHEMA
+    in the SNAPSHOT_SCHEMA
     """
 
-    # Create a temporary bill table by copying OPENSTATES_SCHEMA.bill columns
+    # Create a temporary bill table by copying SNAPSHOT_SCHEMA.bill columns
     # WHERE false clause is shortcut to creating empty temporary table
     temp_table_name = "bill_temp"
     temp_table_query = """
@@ -87,7 +86,7 @@ def openstates_upsert_bills(cur, bills):
         FROM {1}.bill
         WHERE false
     """
-    cur.execute(temp_table_query.format(temp_table_name, OPENSTATES_SCHEMA))
+    cur.execute(temp_table_query.format(temp_table_name, SNAPSHOT_SCHEMA))
 
     # Create a string buffer
     buffer = StringIO()
@@ -115,7 +114,7 @@ def openstates_upsert_bills(cur, bills):
             last_action_date=EXCLUDED.last_action_date,
             abstract=EXCLUDED.abstract
     """
-    cur.execute(update_bills_query.format(OPENSTATES_SCHEMA, temp_table_name))
+    cur.execute(update_bills_query.format(SNAPSHOT_SCHEMA, temp_table_name))
     print("Snapshot upsert main bill table")
     print(cur.statusmessage)
 
@@ -142,9 +141,9 @@ def openstates_update_bill_data(
         FROM {1}.{0}
         WHERE false
     """
-    cur.execute(temp_table_query.format(bill_action, OPENSTATES_SCHEMA))
-    cur.execute(temp_table_query.format(bill_sponsor, OPENSTATES_SCHEMA))
-    cur.execute(temp_table_query.format(bill_vote, OPENSTATES_SCHEMA))
+    cur.execute(temp_table_query.format(bill_action, SNAPSHOT_SCHEMA))
+    cur.execute(temp_table_query.format(bill_sponsor, SNAPSHOT_SCHEMA))
+    cur.execute(temp_table_query.format(bill_vote, SNAPSHOT_SCHEMA))
 
     # Load new data to temporary tables
     cur.copy_from(
@@ -173,11 +172,11 @@ def openstates_update_bill_data(
         WHERE openstates_bill_id IN ({2})
     """
     print("Delete old actions, sponsor, vote snapshots")
-    cur.execute(delete_query.format(OPENSTATES_SCHEMA, bill_action, bill_ids_string))
+    cur.execute(delete_query.format(SNAPSHOT_SCHEMA, bill_action, bill_ids_string))
     print(cur.statusmessage)
-    cur.execute(delete_query.format(OPENSTATES_SCHEMA, bill_sponsor, bill_ids_string))
+    cur.execute(delete_query.format(SNAPSHOT_SCHEMA, bill_sponsor, bill_ids_string))
     print(cur.statusmessage)
-    cur.execute(delete_query.format(OPENSTATES_SCHEMA, bill_vote, bill_ids_string))
+    cur.execute(delete_query.format(SNAPSHOT_SCHEMA, bill_vote, bill_ids_string))
     print(cur.statusmessage)
 
     # Copy new data to live tables
@@ -188,17 +187,17 @@ def openstates_update_bill_data(
     """
     print("Update actions, sponsor, vote snapshots with new data")
     cur.execute(
-        update_data_query.format(OPENSTATES_SCHEMA, bill_action, bill_action + "_temp")
+        update_data_query.format(SNAPSHOT_SCHEMA, bill_action, bill_action + "_temp")
     )
     print(cur.statusmessage)
     cur.execute(
         update_data_query.format(
-            OPENSTATES_SCHEMA, bill_sponsor, bill_sponsor + "_temp"
+            SNAPSHOT_SCHEMA, bill_sponsor, bill_sponsor + "_temp"
         )
     )
     print(cur.statusmessage)
     cur.execute(
-        update_data_query.format(OPENSTATES_SCHEMA, bill_vote, bill_vote + "_temp")
+        update_data_query.format(SNAPSHOT_SCHEMA, bill_vote, bill_vote + "_temp")
     )
     print(cur.statusmessage)
 
@@ -210,197 +209,6 @@ def get_buffer(df):
     return buffer
 
 
-# Updates main legtracker tables with new openstates data
-def legtracker_update(cur, updated_since, force_update=False):
-    """
-    Input: psycopg2 cursor, timestamp, forced update flag value
-    Output: None (updates live front-end tables)
-
-    Updates front-end tables bill, bill_history, chamber_vote_results with new Openstates data.
-    """
-
-    ### QUERIES ###
-
-    # Truncate query
-    truncate_query = "TRUNCATE TABLE {0}.{1}"
-
-    # Count query before upsert
-    # JOIN clause selects bill_sponsor rows with valid authorship types and coalesces possible columns for names
-    count_query = """
-        SELECT COUNT(*)
-        FROM {0}.bill
-        JOIN (
-            SELECT openstates_bill_id
-                , coalesce(full_name,name) AS name
-            FROM {0}.bill_sponsor
-            WHERE primary_author = 'True'
-        ) a1 USING(openstates_bill_id)
-        LEFT JOIN (
-            SELECT openstates_bill_id
-                , string_agg(name, ', ') AS names
-            FROM {0}.bill_sponsor
-            WHERE primary_author != 'True'
-              AND type IN ('author', 'principal coauthor')
-            GROUP BY 1
-        ) a2 USING(openstates_bill_id)
-        WHERE updated_at > '{1}'
-    """
-    # Upsert query for bill table
-    # INSERT clause selects columns from LEGTRACKER.bill to update
-    # SELECT clause maps OPENSTATES_SCHEMA.bill column names to LEGTRACKER.bill and generates leginfo URL from template
-    # JOIN clause normalizes sponsor/author names
-    # WHERE clause selects by last-updated date timestamp
-    # ON CONFLICT clause chooses selected content to overwrite existing rows when in conflict
-    bill_query = """
-        INSERT INTO {0}.bill (
-            openstates_bill_id
-            , bill_name
-            , bill_number
-            , full_text
-            , author
-            , origin_chamber_id
-            , committee_id
-            , status
-            , coauthors
-            , leginfo_link
-            , leg_session
-        )
-        SELECT a1.openstates_bill_id
-            , b.title AS bill_name
-            , b.bill_num AS bill_number
-            , b.abstract AS full_text
-            , a1.name AS author
-            , CASE WHEN b.chamber = 'Assembly' THEN 1 ELSE 2 END AS origin_chamber_id
-            , null AS committee_id
-            , null AS status
-            , a2.names AS coauthors
-            , CONCAT('https://leginfo.legislature.ca.gov/faces/billTextClient.xhtml?bill_id=202320240',REPLACE(b.bill_num, ' ', '')) AS leginfo_link
-            , b.session AS leg_session
-        FROM {1}.bill b
-        JOIN (
-            SELECT openstates_bill_id
-                , coalesce(full_name,name) AS name
-            FROM {1}.bill_sponsor
-            WHERE primary_author = 'True'
-        ) a1 USING(openstates_bill_id)
-        LEFT JOIN (
-            SELECT openstates_bill_id
-                , string_agg(name, ', ') AS names
-            FROM {1}.bill_sponsor
-            WHERE primary_author != 'True'
-              AND type IN ('author', 'principal coauthor')
-            GROUP BY 1
-        ) a2 USING(openstates_bill_id)
-        WHERE b.updated_at > '{2}'
-        ON CONFLICT (openstates_bill_id) DO UPDATE SET
-            bill_name = EXCLUDED.bill_name,
-            bill_number = EXCLUDED.bill_number,
-            full_text = EXCLUDED.full_text,
-            author = EXCLUDED.author,
-            origin_chamber_id = EXCLUDED.origin_chamber_id,
-            committee_id = EXCLUDED.committee_id,
-            status = EXCLUDED.status,
-            coauthors = EXCLUDED.coauthors,
-            leginfo_link = EXCLUDED.leginfo_link,
-            leg_session = EXCLUDED.leg_session
-    """
-
-    # Rebuild bill history table query
-    # INSERT clause selects columns from LEGTRACKER.bill_history to update
-    # SELECT clause maps columns from OPENSTATES_SCHEMA.bill_action
-    # JOIN clause concatenates OPENSTATES_SCHEMA.bill data to selection
-    # JOIN clause concatenates LEGTRACKER.bill data to selection to index on internal bill_id
-    bill_history_query = """
-        INSERT INTO {0}.bill_history (
-            bill_id
-            , event_date
-            , event_text
-            , chamber_id
-            , history_order
-        )
-        SELECT b2.bill_id
-            , a.action_date::date AS event_date
-            , a.description AS event_text
-            , CASE WHEN a.chamber = 'Assembly' THEN 1
-                   WHEN a.chamber = 'Senate' THEN 2
-                   ELSE null END AS chamber_id
-            , a.action_order::integer AS history_order
-        FROM {1}.bill_action a
-        JOIN {1}.bill b1 USING(openstates_bill_id)
-        JOIN {0}.bill b2 ON b1.bill_num = b2.bill_number
-    """
-
-    # Rebuild vote result table query
-    # INSERT clause selects columns to update
-    # SELECT clause selects columns from OPENSTATES_SCHEMA.bill_vote
-    # JOIN clause concatenates bill data from OPENSTATES_SCHEMA.bill
-    # JOIN clause concatenates bill data from LEGTRACKER.bill ??
-    # JOIN clause concatenates chamber data from LEGTRACKER.chamber
-    bill_vote_query = """
-        INSERT INTO {0}.chamber_vote_result(
-            vote_date
-            , bill_id
-            , chamber_id
-            , vote_text
-            , vote_threshold
-            , vote_result
-            , votes_for
-            , votes_against
-            , votes_other
-        )
-        SELECT a.vote_date::date
-            , c.bill_id
-            , d.chamber_id
-            , a.motion_text
-            , a.vote_threshold
-            , a.vote_result
-            , a.yes_count::integer
-            , a.no_count::integer
-            , a.other_count::integer
-        FROM {1}.bill_vote a
-        JOIN {1}.bill b USING(openstates_bill_id)
-        JOIN {0}.bill c ON b.bill_num = c.bill_number
-        JOIN {0}.chamber d ON a.vote_location = d.name
-    """
-
-    ### RUN UPDATES ###
-
-    # Set default value for timestamp
-    stamp = updated_since
-
-    # Update timestamp if forced update flag is TRUE
-    if force_update:
-        print(
-            "Force update enabled. Initiating forced refresh of legtracker from snapshot..."
-        )
-        stamp = LAST_UPDATED_DEFAULT
-    else:
-        print("Normal update. Applying changes since last update...")
-
-    # Upsert changes into bill table
-    cur.execute(count_query.format(OPENSTATES_SCHEMA, stamp))
-    count_result = cur.fetchone()
-    snapshot_count = count_result[0]
-    print("Retrieved {0} rows from Openstates snapshot...".format(snapshot_count))
-    print("Updating frontend bill tables")
-    cur.execute(truncate_query.format(LEGTRACKER_SCHEMA, "bill"))
-    print(cur.statusmessage)
-    cur.execute(bill_query.format(LEGTRACKER_SCHEMA, OPENSTATES_SCHEMA, stamp))
-    print(cur.statusmessage)
-
-    # Clear and rebuild bill history and votes tables
-    print("Flush out bill history and chamber votes")
-    cur.execute(truncate_query.format(LEGTRACKER_SCHEMA, "bill_history"))
-    print(cur.statusmessage)
-    cur.execute(truncate_query.format(LEGTRACKER_SCHEMA, "chamber_vote_result"))
-    print(cur.statusmessage)
-    print ("Rebuild bill history, chamber votes")
-    cur.execute(bill_history_query.format(LEGTRACKER_SCHEMA, OPENSTATES_SCHEMA))
-    print(cur.statusmessage)
-    cur.execute(bill_vote_query.format(LEGTRACKER_SCHEMA, OPENSTATES_SCHEMA))
-    print(cur.statusmessage)
-
-
 def get_last_update_timestamp(cur):
     """
     Input: psycopg2 cursor
@@ -410,7 +218,7 @@ def get_last_update_timestamp(cur):
     """
     query = "SELECT MAX(updated_at) FROM {0}.bill"
 
-    cur.execute(query.format(OPENSTATES_SCHEMA))
+    cur.execute(query.format(SNAPSHOT_SCHEMA))
     last_updated = cur.fetchone()[0]
 
     if last_updated == "" or last_updated == None:
@@ -523,7 +331,18 @@ def main():
 
             # If flag is activated, re-sync DB schemas regardless of update
             if args.force_update:
-                legtracker_update(cur, last_update, force_update=args.force_update)
+                # Upserts new bills and new bill content into Openstates/snapshot schema
+                openstates_upsert_bills(cur, bill_updates["bills"])
+
+                # Updates bill actions, sponsors, votes from Openstates response
+                openstates_update_bill_data(
+                    cur=cur,
+                    bill_list=bill_updates["bills"]["openstates_bill_id"],
+                    bill_actions=bill_updates["bill_actions"],
+                    bill_sponsors=bill_updates["bill_sponsors"],
+                    bill_votes=bill_updates["bill_votes"],
+                )
+                print("Snapshot forced to update")
             else:
                 print("Skipping forced refresh -- no bills to update; finishing.")
         else:
@@ -545,9 +364,6 @@ def main():
             )
             print("Snapshot updated")
 
-            # Updates bill, bill_history, and chamber_vote_result tables
-            print("Updating legtracker tables")
-            legtracker_update(cur, last_update, force_update=args.force_update)
         conn.commit()
 
     except (Exception, psycopg2.DatabaseError) as error:

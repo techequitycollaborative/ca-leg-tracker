@@ -17,9 +17,8 @@ ENDPOINTS = {
     "committees": "https://v3.openstates.org/committees",
 }
 WAIT_TIME = 10  # openstates has a rate limit of 6 requests/minute
-BASE_PARAMS = {
+BASE_PARAMS = { # people schema does not use session param
     "jurisdiction": "California",
-    "session": "20252026",
     "sort": "updated_asc",  # only usable option, unfortunately this could lead to skipped rows if updates happen during sync
     "per_page": 20,  # max allowed by openstates
     "apikey": config("openstates")["api_key"],

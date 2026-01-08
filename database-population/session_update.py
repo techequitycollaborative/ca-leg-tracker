@@ -18,11 +18,9 @@ from io import StringIO
 import csv
 import people_openstates_fetch as people
 import capitol_codex_scraper as codex
-from text_utils import transform_name
 
 # Index into credentials.ini for DB schema names
-OPENSTATES_SCHEMA = config("postgresql_schemas")["openstates_schema"]
-LEGTRACKER_SCHEMA = config("postgresql_schemas")["legtracker_schema"]
+SNAPSHOT_SCHEMA = config("postgresql_schemas")["snapshot_schema"]
 
 LAST_UPDATED_DEFAULT = "2000-01-01T00:00:00"
 
@@ -43,77 +41,6 @@ def get_buffer(df):
     buffer.seek(0)
     return buffer
 
-
-def legtracker_update(cur, updated_since, force_update=False):
-    truncate_query = "TRUNCATE TABLE {0}.{1}"
-
-    count_query = """
-        SELECT COUNT(*)
-        FROM {0}.people
-        WHERE updated_at > '{1}'
-    """
-
-    fetch_query = """
-        SELECT p.openstates_people_id
-            , CASE WHEN pr.org_classification = 'lower' THEN 1 ELSE 2 END AS chamber_id
-            , p.name AS name
-            , pr.district AS district
-            , p.party as PARTY
-        FROM {0}.people p
-        JOIN (
-            SELECT openstates_people_id
-                , org_classification
-                , district
-            FROM {0}.people_roles 
-        ) pr ON p.openstates_people_id = pr.openstates_people_id
-        WHERE p.updated_at > '{1}'
-    """
-
-    insert_query = """
-        INSERT INTO {0}.legislator
-        (openstates_people_id, chamber_id, name, district, party)
-        VALUES (%s, %s, %s, %s, %s)
-        ON CONFLICT (openstates_people_id) DO UPDATE SET
-            chamber_id = EXCLUDED.chamber_id,
-            name = EXCLUDED.name,
-            district = EXCLUDED.district,
-            party = EXCLUDED.party
-    """
-
-    stamp = updated_since
-
-    if force_update:
-        print(
-            "Force update enabled. Initiating forced refresh of legtracker from snapshot..."
-        )
-        stamp = LAST_UPDATED_DEFAULT
-    else:
-        print("Normal update. Applying changes since last update...")
-
-    cur.execute(count_query.format(OPENSTATES_SCHEMA, stamp))
-    count_result = cur.fetchone()
-    snapshot_count = count_result[0]
-    print("Retrieved {0} rows from Openstates snapshot...".format(snapshot_count))
-
-    # Truncate the legislator table
-    cur.execute(truncate_query.format(LEGTRACKER_SCHEMA, "legislator"))
-
-    # Fetch the data from the snapshot schema
-    cur.execute(fetch_query.format(OPENSTATES_SCHEMA, stamp))
-    rows = cur.fetchall()
-
-    # Insert the transformed data into the legislator table
-    for row in rows:
-        openstates_people_id, chamber_id, name, district, party = row
-        transformed_name = transform_name(name)  # Apply the transformation
-        cur.execute(
-            insert_query.format(LEGTRACKER_SCHEMA),
-            (openstates_people_id, chamber_id, transformed_name, district, party),
-        )
-
-    print("Update completed successfully.")
-
-
 def openstates_upsert_people(cur, people):
     temp_table_name = "people_temp"
     temp_table_query = """
@@ -123,7 +50,7 @@ def openstates_upsert_people(cur, people):
         WHERE false
     """  # assumes people table exists
 
-    cur.execute(temp_table_query.format(temp_table_name, OPENSTATES_SCHEMA))
+    cur.execute(temp_table_query.format(temp_table_name, SNAPSHOT_SCHEMA))
 
     buffer = StringIO()
 
@@ -141,7 +68,7 @@ def openstates_upsert_people(cur, people):
             party=EXCLUDED.party,
             updated_at=EXCLUDED.updated_at
     """
-    cur.execute(update_people_query.format(OPENSTATES_SCHEMA, temp_table_name))
+    cur.execute(update_people_query.format(SNAPSHOT_SCHEMA, temp_table_name))
     return
 
 def load_from_buffer(cur, df, table_name, table_columns):
@@ -159,7 +86,7 @@ def flush_table(cur, table_name, people_id_string):
         WHERE openstates_people_id IN ({2})
     """
     print("Delete old {} snapshot".format(table_name))
-    cur.execute(delete_query.format(OPENSTATES_SCHEMA, table_name, people_id_string))
+    cur.execute(delete_query.format(SNAPSHOT_SCHEMA, table_name, people_id_string))
     print(cur.statusmessage)
     return
 
@@ -171,7 +98,7 @@ def insert_from_temp(cur, table_name, table_columns):
     """
     cur.execute(
         update_data_query.format(
-            OPENSTATES_SCHEMA, 
+            SNAPSHOT_SCHEMA, 
             table_name,
             ", ".join(table_columns), 
             table_name + "_temp"
@@ -203,13 +130,13 @@ def openstates_update_people_data(
     """
     # Create temporary tables
     print("Creating temporary tables...")
-    cur.execute(temp_table_query.format(people_roles, OPENSTATES_SCHEMA))
+    cur.execute(temp_table_query.format(people_roles, SNAPSHOT_SCHEMA))
     print(cur.statusmessage)
-    cur.execute(temp_table_query.format(people_offices, OPENSTATES_SCHEMA))
+    cur.execute(temp_table_query.format(people_offices, SNAPSHOT_SCHEMA))
     print(cur.statusmessage)
-    cur.execute(temp_table_query.format(people_names, OPENSTATES_SCHEMA))
+    cur.execute(temp_table_query.format(people_names, SNAPSHOT_SCHEMA))
     print(cur.statusmessage)
-    cur.execute(temp_table_query.format(people_sources, OPENSTATES_SCHEMA))
+    cur.execute(temp_table_query.format(people_sources, SNAPSHOT_SCHEMA))
     print(cur.statusmessage)
 
     # Load new data
@@ -245,7 +172,7 @@ def get_last_update_timestamp(cur):
     """
     query = "SELECT MAX(updated_at) FROM {0}.people"
 
-    cur.execute(query.format(OPENSTATES_SCHEMA))
+    cur.execute(query.format(SNAPSHOT_SCHEMA))
     last_updated = cur.fetchone()[0]
 
     if last_updated == "" or last_updated == None:
@@ -354,7 +281,7 @@ def fetch_codex_updates():
 #         WHERE false
 #     """ # assumes committee table exists?
 
-#     cur.execute(temp_table_query.format(temp_table_name, OPENSTATES_SCHEMA))
+#     cur.execute(temp_table_query.format(temp_table_name, SNAPSHOT_SCHEMA))
 
 #     buffer = StringIO()
 
@@ -373,7 +300,7 @@ def fetch_codex_updates():
 #             current_role=EXCLUDED.current_role,
 #             updated_at=EXCLUDED.updated_at
 #     """
-#     cur.execute(update_committees_query.format(OPENSTATES_SCHEMA, temp_table_name))
+#     cur.execute(update_committees_query.format(SNAPSHOT_SCHEMA, temp_table_name))
 #     return
 
 # def fetch_committee_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_page=1):
@@ -413,7 +340,7 @@ def codex_upsert_contacts(
         )
     """  # specifying columns because they differ from the final people_contacts table
     
-    cur.execute(temp_table_query.format(temp_table_name, OPENSTATES_SCHEMA))
+    cur.execute(temp_table_query.format(temp_table_name, SNAPSHOT_SCHEMA))
 
     # Insert contacts collected for each issue to the staging table
     for issue, df in contact_data.items():
@@ -452,7 +379,7 @@ def codex_upsert_contacts(
         FROM {1} t
         JOIN {0}.people_roles pr ON t.district_number = pr.district AND pr.org_classification='{2}'
     """
-    cur.execute(insert_query.format(OPENSTATES_SCHEMA, temp_table_name, chamber))
+    cur.execute(insert_query.format(SNAPSHOT_SCHEMA, temp_table_name, chamber))
     print(cur.statusmessage)
     return
 
@@ -501,11 +428,22 @@ def main():
 
             # If flag is activated, re-sync DB schemas regardless of update
             if args.force_update:
-                legtracker_update(cur, last_update, force_update=args.force_update)
+                # Upserts new bills and new bill content into Openstates/snapshot schema
+                openstates_upsert_people(cur, legislator_updates["people"])
+
+                # Updates people roles from Openstates response
+                openstates_update_people_data(
+                    cur=cur,
+                    people_list=legislator_updates["people"]["openstates_people_id"],
+                    people_role_data=legislator_updates["people_roles"],
+                    people_office_data=legislator_updates["people_offices"],
+                    people_name_data=legislator_updates["people_names"],
+                    people_source_data=legislator_updates["people_sources"]
+                )
+                print("Snapshot forced to update")
             else:
                 print("Skipping forced refresh -- no legislators to update; finishing.")
         else:
-
             # Logs new information to console
             for k in legislator_updates:
                 print(k)
@@ -535,9 +473,6 @@ def main():
                 )
             print("Legislator snapshot updated")
 
-            # # Updates legislator table
-            print("Updating legtracker tables")
-            legtracker_update(cur, last_update, force_update=args.force_update)
         conn.commit()
     except psycopg2.Error as e:
         print(f"[MAIN] Database error: {e.pgerror}")
