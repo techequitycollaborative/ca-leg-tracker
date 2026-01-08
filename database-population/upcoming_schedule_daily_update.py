@@ -15,7 +15,6 @@ import os
 from tqdm import tqdm
 from db_utils import copy_temp_table
 
-LEGTRACKER_SCHEMA = config("postgresql_schemas")["legtracker_schema"]
 SNAPSHOT_SCHEMA = config("postgresql_schemas")["snapshot_schema"]
 CURRENT_SESSION = "20252026"
 
@@ -48,7 +47,7 @@ def establish_schedule(cur):
             CONSTRAINT bill_schedule_aux UNIQUE(openstates_bill_id, chamber_id, event_date, event_text, agenda_order, event_time, event_location, event_room)
         );
     """
-    cur.execute(create_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE))
+    cur.execute(create_query.format(SNAPSHOT_SCHEMA, MAIN_TABLE))
     print(cur.statusmessage)
     return
 
@@ -62,7 +61,7 @@ def stage_known_schedule(cur, dev):
     """
     print("Copying known events")
     cur.execute(
-        temp_table_query.format(STAGE_KNOWN_TABLE, LEGTRACKER_SCHEMA, MAIN_TABLE)
+        temp_table_query.format(STAGE_KNOWN_TABLE, SNAPSHOT_SCHEMA, MAIN_TABLE)
     )
     print(cur.statusmessage)
 
@@ -187,7 +186,7 @@ def prune_bill_schedule(cur, dev):
     # Truncate query
     truncate_query = "TRUNCATE TABLE {0}.{1}"
     # Truncate bill_schedule
-    cur.execute(truncate_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE))
+    cur.execute(truncate_query.format(SNAPSHOT_SCHEMA, MAIN_TABLE))
     print("Pruning main table")
     print(cur.statusmessage)
 
@@ -240,14 +239,14 @@ def insert_schedule(cur):
     """
     # insert all valid events
     cur.execute(
-        insert_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE, STAGE_KNOWN_VALID_TABLE)
+        insert_query.format(SNAPSHOT_SCHEMA, MAIN_TABLE, STAGE_KNOWN_VALID_TABLE)
     )
     print("All known events re-inserted")
     print(cur.statusmessage)
 
     # insert the events that were just scraped
     cur.execute(
-        insert_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE, STAGE_NEW_VALID_TABLE)
+        insert_query.format(SNAPSHOT_SCHEMA, MAIN_TABLE, STAGE_NEW_VALID_TABLE)
     )
     print("New events inserted")
     print(cur.statusmessage)
@@ -273,7 +272,7 @@ def update_event_notes(cur, changed_events):  # deal with edge case 3
         """
 
         for change in changed_events:
-            temp = update_query.format(LEGTRACKER_SCHEMA, MAIN_TABLE, *change)
+            temp = update_query.format(SNAPSHOT_SCHEMA, MAIN_TABLE, *change)
             print(temp)
             # Unpack all tuple elements in order
             cur.execute(temp)
@@ -352,7 +351,10 @@ def fetch_schedule_update(dev=False):
 
     else:  # Otherwise, just fetch as normal
         print("Fetching schedule updates...")
-        assembly_update, assembly_changes = assembly.scrape_dailyfile(verbose=True)
+        # assembly_update, assembly_changes = assembly.scrape_dailyfile(verbose=True)
+        # TODO: update assembly scraper
+        assembly_update = set()
+        assembly_changes = set()
         senate_update, senate_changes = senate.scrape_dailyfile(verbose=True)
 
         print(f"{len(assembly_update)} upcoming Assembly events")
