@@ -23,6 +23,7 @@ from datetime import datetime
 
 # Index into credentials.ini for DB schema names
 SNAPSHOT_SCHEMA = config("postgresql_schemas")["snapshot_schema"]
+APP_SCHEMA = config("postgresql_schemas")["app_schema"]
 
 LAST_UPDATED_DEFAULT = "2000-01-01T00:00:00"
 
@@ -289,6 +290,23 @@ def fetch_bill_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_
         "bill_votes": df_bill_votes,
     }
 
+def refresh_snapshot_views(cur):
+    bills_query = """
+        REFRESH CONCURRENTLY MATERIALIZED VIEW {0}.bills_mv
+    """
+    bill_history_query = """
+        REFRESH CONCURRENTLY MATERIALIZED VIEW {0}.bill_history_mv
+    """
+    #TODO: include legislators, which should also be a materialized view
+
+    print("Refreshing materialized view - bills")
+    cur.execute(bills_query.format(APP_SCHEMA))
+    print(cur.statusmessage)
+
+    print("Refreshing materialized view - bill history")
+    cur.execute(bill_history_query.format(APP_SCHEMA))
+    print(cur.statusmessage)
+    return
 
 def main():
     # argument parser detects optional flags
@@ -364,6 +382,8 @@ def main():
             )
             print("Snapshot updated")
 
+        # Always refresh materialized views
+        refresh_snapshot_views(cur=cur)
         conn.commit()
 
     except (Exception, psycopg2.DatabaseError) as error:
