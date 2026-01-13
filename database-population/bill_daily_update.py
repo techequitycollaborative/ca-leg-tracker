@@ -292,10 +292,10 @@ def fetch_bill_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_
 
 def refresh_snapshot_views(cur):
     bills_query = """
-        REFRESH MATERIALIZED VIEW {0}.bills_mv
+        REFRESH CONCURRENTLY MATERIALIZED VIEW {0}.bills_mv
     """
     bill_history_query = """
-        REFRESH MATERIALIZED VIEW {0}.bill_history_mv
+        REFRESH CONCURRENTLY MATERIALIZED VIEW {0}.bill_history_mv
     """
     #TODO: include legislators, which should also be a materialized view
 
