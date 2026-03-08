@@ -88,7 +88,8 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
                         current_time = current_time.replace("Time: ", "")
                         current_location, current_room = current_loc.split(", ")
                     except:
-                        print("No time or location details could be extracted...")
+                        print(f"No time or location details could be extracted for {current_name} on {current_date}...")
+                        print(current_details)
                         continue
 
                     # Extract hearing notes if available
@@ -170,9 +171,16 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
     
 
 def main():
-    # scrape_committee_hearing()
-    scrape_committee_hearing(verbose=True)
+    final, changes = scrape_committee_hearing()
+    # final, changes = scrape_committee_hearing(verbose=True)
+    
+    print("Detected changes:")
+    for row in changes:
+        print(row)
 
+    print("Detected bills scheduled for hearing:")
+    for row in final:
+        print(row)
 
 if __name__ == "__main__":
     main()
