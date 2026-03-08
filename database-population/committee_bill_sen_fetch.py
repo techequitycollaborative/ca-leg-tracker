@@ -121,11 +121,20 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
                     current_agenda = current_hearing.get_by_role(
                         "link", name="View Agenda"
                     )
-                    scraper_utils.view_agenda(page, current_agenda)
+                    scraper_utils.page_click(current_agenda)
 
                     # Extract HTML and parse as BeautifulSoup object
-                    content = page.content()
-                    soup = bs(content, "html.parser")
+                    # Wait for the modal to be visible
+                    page.wait_for_selector("div.agenda-container", state="visible", timeout=5000)
+
+                    # Get the HTML content of the modal
+                    modal_html = page.locator("div.agenda-container").inner_html()
+
+                    # Parse with BeautifulSoup
+                    soup = bs(modal_html, "html.parser")
+                    
+                    # with open(f"SEN_agenda-{i}.html", "w", encoding="utf-8") as f:
+                    #     f.write(soup.prettify())
                     # Extract measures
                     measure_selector = soup.select("span.measureLink")
                     if verbose:
@@ -168,8 +177,8 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
     
 
 def main():
-    final, changes = scrape_committee_hearing()
-    # final, changes = scrape_committee_hearing(verbose=True)
+    # final, changes = scrape_committee_hearing()
+    final, changes = scrape_committee_hearing(verbose=True)
     
     print("Detected changes:")
     for row in changes:
