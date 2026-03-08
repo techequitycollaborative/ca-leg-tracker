@@ -18,7 +18,7 @@ USERAGENTS = [
 ]
 def get_start_end_query(source_url):
     start_date = datetime.date.today()
-    end_date = start_date + datetime.timedelta(days=15)
+    end_date = start_date + datetime.timedelta(days=30)
     query_url = (
         source_url
         + "?startDate="
@@ -94,21 +94,20 @@ def add_measure_details(event_time, event_location, event_room, measures):
     return results
 
 
-def view_agenda(page, link):
+def page_click(clickable):
     """
-    Input: Playwright page object, link pointer
-    Output: None (clicks the link)
+    Input: Playwright page object, pointer to clickable object
+    Output: None (clicks the object)
     """
     try:
-        link.wait_for(state="attached")
-        link.click()
-        page.wait_for_timeout(1000)  # Wait for content to load
-    except Exception as e:  # TODO: define helpful exception behavior
+        clickable.wait_for(state="visible", timeout=5000)
+        clickable.click()
+    except Exception as e:
+        print(f"Error: {e}")
         return e
-    return
 
 
-def make_page(url, max_retries=3, timeout=30000):
+def make_page(url, max_retries=3, timeout=30000, headless=True):
     """
     Args:
         url: target webpage
@@ -131,7 +130,7 @@ def make_page(url, max_retries=3, timeout=30000):
                 # Initialize Playwright handler
                 # with sync_playwright() as p:
                 handler = sync_playwright().start()
-                browser = handler.chromium.launch()
+                browser = handler.chromium.launch(headless=headless)
                 # User agent, viewport, locale to avoid detection
                 context = browser.new_context(
                     user_agent=user_agent,
