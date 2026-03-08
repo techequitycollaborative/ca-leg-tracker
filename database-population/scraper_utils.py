@@ -16,7 +16,6 @@ USERAGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'
 ]
-
 def get_start_end_query(source_url):
     start_date = datetime.date.today()
     end_date = start_date + datetime.timedelta(days=15)
@@ -26,7 +25,7 @@ def get_start_end_query(source_url):
         + start_date.strftime("%Y-%m-%d")
         + "&endDate="
         + end_date.strftime("%Y-%m-%d")
-        + "&floorMeetings=1&committeeHearings=1"
+        + "&committeeHearings=1"
     )
     return start_date, end_date, query_url
 
