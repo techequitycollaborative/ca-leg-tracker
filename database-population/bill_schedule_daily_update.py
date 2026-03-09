@@ -6,8 +6,8 @@ on their internal bill_id (and filter these rows out if a bill_id cannot be foun
 the live bill_schedule table and remove all staging tables.
 """
 
-import dailyfile_assembly_scraper as assembly
-import dailyfile_senate_scraper as senate
+import committee_bill_asm_fetch as assembly
+import committee_bill_sen_fetch as senate
 from config import config
 import psycopg2
 import pickle
@@ -351,11 +351,8 @@ def fetch_schedule_update(dev=False):
 
     else:  # Otherwise, just fetch as normal
         print("Fetching schedule updates...")
-        # assembly_update, assembly_changes = assembly.scrape_dailyfile(verbose=True)
-        # TODO: update assembly scraper
-        assembly_update = set()
-        assembly_changes = set()
-        senate_update, senate_changes = senate.scrape_dailyfile(verbose=True)
+        assembly_update, assembly_changes = assembly.scrape_committee_hearing(verbose=True)
+        senate_update, senate_changes = senate.scrape_committee_hearing(verbose=True)
 
         print(f"{len(assembly_update)} upcoming Assembly events")
         print(f"{len(senate_update)} upcoming Senate events")

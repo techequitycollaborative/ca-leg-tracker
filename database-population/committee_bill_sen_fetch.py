@@ -1,5 +1,5 @@
 """
-This scraper pulls content from the CA State Senate's Daily File page and parses relevant events for legislation tracking.
+This scraper pulls content from the CA State Senate's Calendar page and parses relevant events for legislation tracking.
 
 Input: URL for Senate Calendar page (already set as default input)
 Output: set of tuples (EVENT_DATE, EVENT_TEXT, BILL_NUMBER) where EVENT_TEXT is a floor action or commitee
@@ -9,22 +9,19 @@ First, the page is manipulated using Playwright as a quick/dirty solution to ren
 by simulating user page navigation.
 
 Once the HTML content is manipulated into the desired state, the contents are parsed by BeautifulSoup so we can extract
-elements marked as Daily File section items. For the floor session, we extract the element header which should contain the
-current date to enumerate against all floor actions and associated bills/measures. To do so, we need to iterate over all
-action subsections (ex: 'First Reading'), which act as event descriptions, and extract a list of bills in that subsection.
+elements marked as Daily File section items. For the committee hearings, we use the committee hearing agenda title as an
+event description, extract the specified date from the preceding h5 element, and a list of bills within this hearing 
+subsection.
 
-For the committee hearings, we use the committee hearing agenda title as an event description, extract the specified date
-from the preceding h5 element, and a list of bills within this hearing subsection.
-
-For both the floor action and committee hearing sections, we pass the event date, event text/description, and the list of
-bills into a utils function, which returns a set of tuples in the shape (DATE, EVENT_TEXT, BILL_NUMBER).
+For each individual hearing, the event date, event text/description, and the list of bills are passed into a utils 
+function, which returns a set of tuples in the shape (DATE, EVENT_TEXT, BILL_NUMBER).
 """
 
 from bs4 import BeautifulSoup as bs
 import scraper_utils
 
-
-def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=False):
+# TODO: refactor with Python classes for readability
+def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", verbose=False):
     # Generate start and end dates for a query on the Senate calendar
     start_date, end_date, query_url = scraper_utils.get_start_end_query(source_url)
     if verbose:
@@ -63,56 +60,6 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                 if verbose:
                     print("Looking for events...")
 
-                if i == 0:  # Assuming Senate DF is only updated day-of
-                    # Examine floor session content
-                    floor_section = current_wrapper.locator(
-                        "div.dailyfile-section.floor-meetings"
-                    ).first
-                    scheduled = not floor_section.get_by_text(
-                        "No floor session scheduled."
-                    ).is_visible(timeout=1000)
-
-                    if scheduled:
-                        floor_agenda = floor_section.get_by_role(
-                            "link", name="View Agenda"
-                        ).first  # Assuming we only need first link
-                        scraper_utils.view_agenda(page, floor_agenda)
-
-                        agenda_found = not page.get_by_text(
-                            "No Agendas were found."
-                        ).is_visible(timeout=5000)
-
-                        if agenda_found:
-                            print("Floor agenda for {} found".format(current_date))
-                            # Extract HTML and parse as BeautifulSoup object
-                            content = page.content()
-                            soup = bs(content, "html.parser")
-                            floor_content = soup.select_one("div.agenda-container")
-                            # Parse agenda into actions
-                            floor_actions = floor_content.select("h3")
-                            for a in floor_actions:
-
-                                # Extract measures AKA bills to be covered in the floor session and union with existing results
-                                measures = a.find_next_sibling(
-                                    "div", class_="agenda-item"
-                                ).select("span.measureLink")
-                                # Update results with set intersection operation on a set of collected bills/measures
-                                current_events = scraper_utils.collect_measure_info(
-                                    current_date, a.text.title(), measures, 2
-                                )
-
-                                current_events_detailed = (
-                                    scraper_utils.add_measure_details(
-                                        "", "", "", current_events
-                                    )
-                                )
-                                floor_session_results = (
-                                    floor_session_results | current_events_detailed
-                                )
-                        # Close agenda pop-up
-                        close_button = page.get_by_role("button", name="Close").first
-                        close_button.click()
-
                 # Examine committee hearing content
                 committee_hearing_section = current_wrapper.locator(
                     "div.dailyfile-section.committee-hearings"
@@ -138,7 +85,8 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                         current_time = current_time.replace("Time: ", "")
                         current_location, current_room = current_loc.split(", ")
                     except:
-                        print("No time or location details could be extracted...")
+                        print(f"No time or location details could be extracted for {current_name} on {current_date}...")
+                        print(current_details)
                         continue
 
                     # Extract hearing notes if available
@@ -173,11 +121,20 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
                     current_agenda = current_hearing.get_by_role(
                         "link", name="View Agenda"
                     )
-                    scraper_utils.view_agenda(page, current_agenda)
+                    scraper_utils.page_click(current_agenda)
 
                     # Extract HTML and parse as BeautifulSoup object
-                    content = page.content()
-                    soup = bs(content, "html.parser")
+                    # Wait for the modal to be visible
+                    page.wait_for_selector("div.agenda-container", state="visible", timeout=5000)
+
+                    # Get the HTML content of the modal
+                    modal_html = page.locator("div.agenda-container").inner_html()
+
+                    # Parse with BeautifulSoup
+                    soup = bs(modal_html, "html.parser")
+                    
+                    # with open(f"SEN_agenda-{i}.html", "w", encoding="utf-8") as f:
+                    #     f.write(soup.prettify())
                     # Extract measures
                     measure_selector = soup.select("span.measureLink")
                     if verbose:
@@ -220,9 +177,16 @@ def scrape_dailyfile(source_url="https://www.senate.ca.gov/calendar", verbose=Fa
     
 
 def main():
-    scrape_dailyfile()
-    # scrape_dailyfile(verbose=True)
+    # final, changes = scrape_committee_hearing()
+    final, changes = scrape_committee_hearing(verbose=True)
+    
+    print("Detected changes:")
+    for row in changes:
+        print(row)
 
+    print("Detected bills scheduled for hearing:")
+    for row in final:
+        print(row)
 
 if __name__ == "__main__":
     main()
