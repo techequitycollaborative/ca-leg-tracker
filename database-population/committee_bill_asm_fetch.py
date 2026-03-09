@@ -62,7 +62,10 @@ def scrape_committee_hearing(
 
             # get date, name, time, location
             hearing_date = current_hearing.locator("td.committee_hearing-date").inner_text()
+
+            # normalize time string
             hearing_time = current_hearing.locator("td.committee_hearing-time").inner_text()
+            hearing_time = hearing_time.replace("am", " a.m.").replace("pm", " p.m.")
             hearing_name = current_hearing.locator("td.committee_hearing-name").inner_text()
             hearing_loc = current_hearing.locator("td.committee_hearing-location").inner_text()
             if "," in hearing_loc:
