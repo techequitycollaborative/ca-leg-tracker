@@ -58,6 +58,8 @@ def scrape_committee_hearing(
 
         # for each hearing
         for i in range(hearing_count):
+            # Refetch
+            # hearing_rows = page.locator("tr.committee-hearing-details")
             current_hearing = hearing_rows.nth(i)
 
             # get date, name, time, location
@@ -88,12 +90,15 @@ def scrape_committee_hearing(
             if "View Agenda" not in row_menu_contents:
                 if verbose:
                     print(f"No agenda found for {hearing_name}, moving on...")
+                # Close the dropdown menu by clicking the button again
+                hearing_menu.click()
+                page.wait_for_timeout(500)
                 continue
             else:
                 print("Clicking current hearing agenda...")
                 agenda_link = current_hearing.locator('a[href*="/api/dailyfile/agenda"]')
-                scraper_utils.page_click(agenda_link)
-
+                scraper_utils.page_click(agenda_link, force=True)
+    
                 # Wait for the modal to be visible
                 page.wait_for_selector("div.agenda-container", state="visible", timeout=5000)
 
@@ -124,9 +129,13 @@ def scrape_committee_hearing(
                     committee_hearing_results | current_events_detailed
                 )
 
-                # Close agenda pop-up
-                close_button = page.get_by_role("button", name="Close").first
-                close_button.click()
+                # Close agenda modal
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(500)
+
+                # Close the dropdown menu by clicking the button again
+                hearing_menu.click()
+                page.wait_for_timeout(500)
 
     except Exception as e:
         print(f"[ASM] Daily File scrape failed: {e}")

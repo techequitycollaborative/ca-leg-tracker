@@ -94,14 +94,14 @@ def add_measure_details(event_time, event_location, event_room, measures):
     return results
 
 
-def page_click(clickable):
+def page_click(clickable, force=False):
     """
     Input: Playwright page object, pointer to clickable object
     Output: None (clicks the object)
     """
     try:
         clickable.wait_for(state="visible", timeout=5000)
-        clickable.click()
+        clickable.click(force=force)
     except Exception as e:
         print(f"Error: {e}")
         return e
