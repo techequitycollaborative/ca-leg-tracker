@@ -11,4 +11,4 @@ RUN playwright install-deps chromium
 
 COPY database-population/ .
 
-CMD ["bash", "-c", "python daily.py"]
+CMD ["python", "daily.py"]
