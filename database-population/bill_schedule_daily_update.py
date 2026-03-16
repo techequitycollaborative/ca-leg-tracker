@@ -13,6 +13,7 @@ import psycopg2
 import pickle
 import os
 from tqdm import tqdm
+from datetime import datetime
 from db_utils import copy_temp_table
 
 SNAPSHOT_SCHEMA = config("postgresql_schemas")["snapshot_schema"]
@@ -350,7 +351,11 @@ def fetch_schedule_update(dev=False):
             final_changes = pickle.load(change_f)
 
     else:  # Otherwise, just fetch as normal
-        print("Fetching schedule updates...")
+        print(
+            "Current timestamp: "
+            + datetime.now().strftime("%Y-%m-%d, %H:%M:%S")
+            + " -- fetching schedule updates"
+        )
         assembly_update, assembly_changes = assembly.scrape_committee_hearing(verbose=True)
         senate_update, senate_changes = senate.scrape_committee_hearing(verbose=True)
 
