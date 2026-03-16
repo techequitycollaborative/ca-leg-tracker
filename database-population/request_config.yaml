@@ -1,0 +1,38 @@
+BILL_COLUMNS:
+    - "openstates_bill_id"
+    - "session"
+    - "chamber"
+    - "bill_num"
+    - "title"
+    - "created_at"
+    - "updated_at"
+    - "first_action_date"
+    - "last_action_date"
+    - "abstract"
+
+BILL_ACTION_COLUMNS:
+    - "openstates_bill_id"
+    - "chamber"
+    - "description"
+    - "action_date"
+    - "action_order"
+
+BILL_SPONSOR_COLUMNS:
+    - "openstates_bill_id"
+    - "name"
+    - "full_name"
+    - "title"
+    - "district"
+    - "primary_author"
+    - "type"
+
+BILL_VOTE_COLUMNS:
+    - "openstates_bill_id"
+    - "motion_text"
+    - "vote_date"
+    - "vote_location"
+    - "vote_result"
+    - "vote_threshold"
+    - "yes_count"
+    - "no_count"
+    - "other_count"
