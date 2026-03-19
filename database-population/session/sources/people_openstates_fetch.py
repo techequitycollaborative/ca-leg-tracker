@@ -3,8 +3,6 @@ Parameters and functions that directly fetch from Openstates via GET requests.
 
 Called in session_update.py
 """
-
-import json
 from config import config
 from time import sleep
 import requests
