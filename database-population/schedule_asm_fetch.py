@@ -34,6 +34,9 @@ def scrape_committee_hearing(
     committee_hearing_results = set()
     committee_hearing_changes = set()
 
+    # Calendar v2.0
+    hearings_normalized = set()
+
      # Try connecting to page
     try:
         browser, page, handler = scraper_utils.make_page(source_url)
@@ -76,8 +79,15 @@ def scrape_committee_hearing(
                 hearing_location = hearing_loc
                 hearing_room = ""
             
-            if verbose:
-                print(f"Parsing {hearing_name}...")
+            # add to hearings_normalized — one row per unique hearing
+            hearings_normalized.add((
+                1,  # chamber_id
+                hearing_date,
+                hearing_name,
+                hearing_time,
+                hearing_location,
+                hearing_room
+            ))
 
             # click three-dot menu
             hearing_menu = current_hearing.locator("button").first
@@ -149,7 +159,7 @@ def scrape_committee_hearing(
             handler.stop()
     # Concatenate the results into a set
         final_results = floor_session_results | committee_hearing_results
-        return final_results, committee_hearing_changes
+        return hearings_normalized, final_results, committee_hearing_changes
 
 def main():
     # final, changes = scrape_committee_hearing()

@@ -31,6 +31,9 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
     floor_session_results = set()
     committee_hearing_results = set()
     committee_hearing_changes = set()
+    
+    # Calendar v2.0
+    hearings_normalized = set()
 
      # Try connecting to page
     try:
@@ -116,6 +119,15 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
                                     current_date, current_name
                                 )
                             )
+                    # add to hearings_normalized — one row per unique hearing
+                    hearings_normalized.add((
+                        2,  # chamber_id
+                        current_date,
+                        current_name,
+                        current_time,
+                        current_location,
+                        current_room
+                    ))
 
                     # Extract every bill on the agenda
                     current_agenda = current_hearing.get_by_role(
@@ -135,15 +147,17 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
                     
                     # with open(f"SEN_agenda-{i}.html", "w", encoding="utf-8") as f:
                     #     f.write(soup.prettify())
-                    # Extract measures
+                    # Extract all HTML elements with the measure identifier
                     measure_selector = soup.select("span.measureLink")
                     if verbose:
                         print("Found {} measures...".format(len(measure_selector)))
 
+                    # Generate a tuple with hearing date, name, chamber_id=2 for every measure element
                     current_events = scraper_utils.collect_measure_info(
                         current_date, current_name, measure_selector, 2
                     )
 
+                    # Expand the tuples with all details
                     current_events_detailed = scraper_utils.add_measure_details(
                         current_time, current_location, current_room, current_events
                     )
@@ -162,7 +176,7 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
         
         # Concatenate the results into a set
         final_results = floor_session_results | committee_hearing_results
-        return final_results, committee_hearing_changes
+        return hearings_normalized, final_results, committee_hearing_changes
 
     except Exception as e:
         print(f"[SEN] Daily File scrape failed: {e}")
