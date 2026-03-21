@@ -4,7 +4,7 @@ from config import config
 import pandas as pd
 from io import StringIO
 import csv
-import sources.people_openstates_fetch as people
+import session.sources.people_openstates_fetch as people
 
 # Index into credentials.ini for DB schema names
 SNAPSHOT_SCHEMA = config("postgresql_schemas")["snapshot_schema"]
