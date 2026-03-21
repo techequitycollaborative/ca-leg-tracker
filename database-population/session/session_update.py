@@ -15,7 +15,7 @@ from session.snapshots.people import (
     upsert_people,
     update_people_data,
 )
-from session.snapshots.contacts import fetch_codex_updates, upsert_contacts
+from session.snapshots.contacts import fetch_codex_updates, codex_upsert_contacts
 
 
 
@@ -35,8 +35,7 @@ def run_session_update(force_update=False):
         )
 
         legislator_updates = fetch_legislator_updates(last_update)
-        contact_updates = session.snapshots.contacts.fetch_codex_updates()
-
+        contact_updates = fetch_codex_updates()
         print("Summary of legislators being updated:")
 
         if len(legislator_updates["people"].index) == 0:
@@ -73,7 +72,7 @@ def run_session_update(force_update=False):
             )
 
             for chamber, contact_data in contact_updates.items():
-                session.snapshots.contacts.codex_upsert_contacts(cur=cur, contact_data=contact_data, chamber=chamber)
+                codex_upsert_contacts(cur=cur, contact_data=contact_data, chamber=chamber)
 
             print("Legislator snapshot updated")
 
