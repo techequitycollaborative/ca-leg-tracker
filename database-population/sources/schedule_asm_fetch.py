@@ -78,16 +78,6 @@ def scrape_committee_hearing(
             else:
                 hearing_location = hearing_loc
                 hearing_room = ""
-            
-            # add to hearings_normalized — one row per unique hearing
-            hearings_normalized.add((
-                1,  # chamber_id
-                hearing_date,
-                hearing_name,
-                hearing_time,
-                hearing_location,
-                hearing_room
-            ))
 
             # click three-dot menu
             hearing_menu = current_hearing.locator("button").first
@@ -120,6 +110,18 @@ def scrape_committee_hearing(
                 
                 # with open(f"ASM_agenda-{i}.html", "w", encoding="utf-8") as f:
                 #     f.write(soup.prettify())
+                # Extract hearing topic if available
+                hearing_topic = soup.select("span.HearingTopic")[0].get_text()
+                # add to hearings_normalized — one row per unique hearing
+                hearings_normalized.add((
+                    1,  # chamber_id
+                    hearing_date,
+                    hearing_name,
+                    hearing_time,
+                    hearing_location,
+                    hearing_room,
+                    hearing_topic
+                ))
 
                 # Extract measures
                 measure_selector = soup.select("span.measureLink")

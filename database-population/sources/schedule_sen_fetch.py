@@ -126,7 +126,8 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
                         current_name,
                         current_time,
                         current_location,
-                        current_room
+                        current_room,
+                        current_note
                     ))
 
                     # Extract every bill on the agenda
@@ -192,14 +193,18 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
 
 def main():
     # final, changes = scrape_committee_hearing()
-    final, changes = scrape_committee_hearing(verbose=True)
+    hearings, bills, changes = scrape_committee_hearing(verbose=True)
     
     print("Detected changes:")
     for row in changes:
         print(row)
 
+    print("Detected hearings:")
+    for row in hearings:
+        print(row)
+
     print("Detected bills scheduled for hearing:")
-    for row in final:
+    for row in bills:
         print(row)
 
 if __name__ == "__main__":
