@@ -45,7 +45,7 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
         wrappers = page.locator("div.page-events--day-wrapper")
         wrapper_count = wrappers.count()
 
-        print("Preparing to scrape Senate Daily File...")
+        print("Preparing to scrape Senate Daily File")
         for i in range(wrapper_count):
             # Extract current date
             current_wrapper = wrappers.nth(i)
@@ -61,7 +61,7 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
                 print(f"No events scheduled for {current_date}")
             else:
                 if verbose:
-                    print("Looking for events...")
+                    print("Looking for events")
 
                 # Examine committee hearing content
                 committee_hearing_section = current_wrapper.locator(
@@ -71,13 +71,17 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
                     "div.page-events__item.page-events__item--committee-hearing"
                 )
                 if verbose:
-                    print("Found {} hearings...".format(hearing_elements.count()))
+                    print("Found {} hearings".format(hearing_elements.count()))
                 # Iterate over individual hearings
                 for j in range(hearing_elements.count()):
                     # Extract current hearing details
                     current_hearing = hearing_elements.nth(j)
                     current_name = (
-                        current_hearing.locator("div.hearing-name").inner_text().title()
+                        scraper_utils.get_hearing_detail(
+                            current_hearing,
+                            "div.hearing-name",
+                            "title"
+                        )
                     )
                     # Extract details like time, location, room
                     try:
@@ -88,7 +92,7 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
                         current_time = current_time.replace("Time: ", "")
                         current_location, current_room = current_loc.split(", ")
                     except:
-                        print(f"No time or location details could be extracted for {current_name} on {current_date}...")
+                        print(f"No time or location details could be extracted for {current_name} on {current_date}")
                         print(current_details)
                         continue
 
@@ -151,7 +155,7 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
                     # Extract all HTML elements with the measure identifier
                     measure_selector = soup.select("span.measureLink")
                     if verbose:
-                        print("Found {} measures...".format(len(measure_selector)))
+                        print("Found {} measures".format(len(measure_selector)))
 
                     # Generate a tuple with hearing date, name, chamber_id=2 for every measure element
                     current_events = scraper_utils.collect_measure_info(

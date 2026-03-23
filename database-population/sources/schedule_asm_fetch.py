@@ -44,7 +44,7 @@ def scrape_committee_hearing(
         # Close welcome message if detected
         page.wait_for_selector("div.ui-dialog.was-welcome-message-modal.ui-widget.ui-widget-content.ui-front")
         if verbose:
-            "Closing welcome message modal..."
+            "Closing welcome message modal"
         close_button = page.get_by_role("button", name="Close").first
         close_button.click()
 
@@ -66,19 +66,22 @@ def scrape_committee_hearing(
             current_hearing = hearing_rows.nth(i)
 
             # get date, name, time, location
-            hearing_date = current_hearing.locator("td.committee_hearing-date").inner_text()
-
-            # normalize time string
-            hearing_time = current_hearing.locator("td.committee_hearing-time").inner_text()
-            hearing_time = hearing_time.replace("am", " a.m.").replace("pm", " p.m.")
-            hearing_name = current_hearing.locator("td.committee_hearing-name").inner_text()
-            hearing_loc = current_hearing.locator("td.committee_hearing-location").inner_text()
-            if "," in hearing_loc:
-                hearing_location, hearing_room = hearing_loc.split(", ")
+            details = {}
+            for detail in ["date", "time", "name", "location"]:
+                details[detail] = scraper_utils.get_hearing_detail(
+                    current_hearing,
+                    f"td.committee_hearing-{detail}"
+                )
+            
+            # normalize details
+            details["date"] = scraper_utils.text_to_date_string(details["date"])
+            details["time"] = details["time"].replace("am", " a.m.")
+            details["time"] = details["time"].replace("pm", " p.m.")
+            if "," in details["location"]:
+                details["location"], details["room"] = details["location"].split(", ")
             else:
-                hearing_location = hearing_loc
-                hearing_room = ""
-
+                details["room"] = ""
+           
             # click three-dot menu
             hearing_menu = current_hearing.locator("button").first
             scraper_utils.page_click(hearing_menu)
@@ -89,13 +92,13 @@ def scrape_committee_hearing(
             
             if "View Agenda" not in row_menu_contents:
                 if verbose:
-                    print(f"No agenda found for {hearing_name}, moving on...")
+                    print(f"No agenda found for {details["name"]}, moving on")
                 # Close the dropdown menu by clicking the button again
                 hearing_menu.click()
                 page.wait_for_timeout(500)
                 continue
             else:
-                print("Clicking current hearing agenda...")
+                print("Clicking current hearing agenda")
                 agenda_link = current_hearing.locator('a[href*="/api/dailyfile/agenda"]')
                 scraper_utils.page_click(agenda_link, force=True)
     
@@ -117,25 +120,25 @@ def scrape_committee_hearing(
                 # add to hearings_normalized — one row per unique hearing
                 hearings_normalized.add((
                     1,  # chamber_id
-                    hearing_date,
-                    hearing_name,
-                    hearing_time,
-                    hearing_location,
-                    hearing_room,
+                    details["date"],
+                    details["name"],
+                    details["time"],
+                    details["location"],
+                    details["room"],
                     hearing_topic
                 ))
 
                 # Extract measures
                 measure_selector = soup.select("span.measureLink")
                 if verbose:
-                    print("Found {} measures...".format(len(measure_selector)))
+                    print("Found {} measures".format(len(measure_selector)))
 
                 hearing_bills = scraper_utils.collect_measure_info(
-                    hearing_date, hearing_name, measure_selector, 1
+                    details["date"], details["name"], measure_selector, 1
                 )
 
                 current_events_detailed = scraper_utils.add_measure_details(
-                    hearing_time, hearing_location, hearing_room, hearing_bills
+                    details["time"], details["location"], details["room"], hearing_bills
                 )
 
                 # Update results with set intersection operation on a set of collected bills/measures
