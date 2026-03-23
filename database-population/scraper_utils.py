@@ -38,7 +38,7 @@ def get_start_end_query(source_url):
     return start_date, end_date, query_url
 
 
-ALLDAY_PATTERNS = re.compile(r'upon|adjournment|call of the chair', re.IGNORECASE)
+ALLDAY_PATTERNS = re.compile(r'prior|upon|adjournment|call of the chair', re.IGNORECASE)
 
 def normalize_hearing_time(time_str):
     """
@@ -49,6 +49,7 @@ def normalize_hearing_time(time_str):
         return None, True
 
     normalized = time_str.strip().lower()
+    normalized = re.sub(r'\bto\b.*$', '', normalized).strip()  # drop end time if present
     normalized = re.sub(r'a\.m\.', 'AM', normalized, flags=re.IGNORECASE)
     normalized = re.sub(r'p\.m\.', 'PM', normalized, flags=re.IGNORECASE)
 
