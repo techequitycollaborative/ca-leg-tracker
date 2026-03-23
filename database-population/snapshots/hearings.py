@@ -33,7 +33,7 @@ def update_hearing_committee_ids(cur):
         UPDATE {0}.{1} h
         SET committee_id = c.committee_id
         FROM {0}.committee c
-        WHERE h.name = c.name
+        WHERE LOWER(h.name) = LOWER(c.name)
         AND h.chamber_id = c.chamber_id
         AND h.committee_id IS NULL
     """
