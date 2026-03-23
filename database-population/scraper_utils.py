@@ -9,7 +9,7 @@ import datetime
 import urllib.request
 import random
 from time import sleep
-from typing import Callable
+import re
 
 USERAGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
@@ -20,7 +20,8 @@ USERAGENTS = [
 
 detail_fns = {
     "strip": lambda x: x.strip(),
-    "title": lambda x: x.strip().title()
+    "title": lambda x: x.strip().title(),
+    "lower": lambda x: x.strip().lower()
 }
 
 def get_start_end_query(source_url):
@@ -36,6 +37,31 @@ def get_start_end_query(source_url):
     )
     return start_date, end_date, query_url
 
+
+ALLDAY_PATTERNS = re.compile(r'upon|adjournment|call of the chair', re.IGNORECASE)
+
+def normalize_hearing_time(time_str):
+    """
+    Returns (time_normalized, is_allday) tuple.
+    time_normalized is a time string in HH:MM:SS format, or None if all-day.
+    """
+    if not time_str or ALLDAY_PATTERNS.search(time_str):
+        return None, True
+
+    normalized = time_str.strip().lower()
+    normalized = re.sub(r'a\.m\.', 'AM', normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r'p\.m\.', 'PM', normalized, flags=re.IGNORECASE)
+
+    for fmt in ('%I:%M %p', '%I %p'):
+        try:
+            return datetime.strptime(normalized, fmt).strftime('%H:%M:%S'), False
+        except ValueError:
+            continue
+
+    # If parsing fails, preserve as all-day and log
+    print(f"WARNING: could not parse time string '{time_str}', treating as all-day")
+    return None, True
+
 def text_to_date_string(s):
     """
     Input: string
@@ -46,8 +72,9 @@ def text_to_date_string(s):
     try:
         dt = parser.parse(s)
         return dt.strftime("%Y-%m-%d")
-    except ValueError:  # TODO: define more helpful behavior
-        pass
+    except ValueError: 
+        print(f"WARNING: could not parse date string {s}")
+        return None
 
 def get_hearing_detail(
         hearing: Locator, 

@@ -1,7 +1,10 @@
 """
 """
+import sources.schedule_asm_fetch as assembly
+import sources.schedule_sen_fetch as senate
 from config import config
 from tqdm import tqdm
+
 
 # Index into credentials.ini for globals
 SNAPSHOT_SCHEMA = config("postgresql_schemas")["snapshot_schema"]
@@ -9,6 +12,21 @@ CURRENT_SESSION = config("resources")["session"]
 HEARINGS_TABLE = "hearings"
 HEARING_BILLS_TABLE = "hearing_bills"
 STAGE_HEARING_BILLS_TABLE = "stage_" + HEARING_BILLS_TABLE
+
+
+def fetch_updates():
+    assembly_hearings, assembly_bills = assembly.scrape_committee_hearing(verbose=True)
+    senate_hearings, senate_bills = senate.scrape_committee_hearing(verbose=True)
+
+    print(f"{len(assembly_hearings)} upcoming Assembly events")
+    print(f"{len(senate_hearings)} upcoming Senate events")
+
+    # join sets before returning
+    final_hearings = assembly_hearings | senate_hearings
+    final_bills = assembly_bills | senate_bills
+
+    return final_hearings, final_bills
+
 
 def truncate_hearings(cur):
     truncate_query = "TRUNCATE TABLE {0}.{1} RESTART IDENTITY CASCADE"
@@ -19,8 +37,18 @@ def truncate_hearings(cur):
 
 def insert_hearings(cur, hearings_data):
     insert_query = """
-        INSERT INTO {0}.{1} (chamber_id, date, name, time, location, room, notes)
-        VALUES (%s, %s::DATE, %s, %s, %s, %s, %s)
+        INSERT INTO {0}.{1} (
+            chamber_id, 
+            date, 
+            time_verbatim,
+            time_normalized,
+            is_allday,
+            name, 
+            location, 
+            room, 
+            notes
+        )
+        VALUES (%s, %s::DATE, %s, %s::TIME, %s, %s, %s, %s, %s)
     """
     for row in tqdm(hearings_data):
         cur.execute(insert_query.format(SNAPSHOT_SCHEMA, HEARINGS_TABLE), tuple(row))
@@ -155,7 +183,7 @@ def insert_hearing_deadlines(cur, lead_days=DEADLINE_LEAD_DAYS, deadline_type=DE
     cur.execute(insert_query.format(SNAPSHOT_SCHEMA, lead_days), (deadline_type,))
     print(f"Inserted hearing deadlines ({lead_days} day lead, type='{deadline_type}')")
     print(cur.statusmessage)
-    
+
 
 def hearing_bills_update(cur, hearing_bills_data):
     stage_hearing_bills(cur, hearing_bills_data)

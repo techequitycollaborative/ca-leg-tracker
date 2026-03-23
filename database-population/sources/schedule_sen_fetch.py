@@ -27,13 +27,10 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
     if verbose:
         print("Querying for Senate events from {} to {}".format(start_date, end_date))
         print(query_url)
-
-    floor_session_results = set()
-    committee_hearing_results = set()
-    committee_hearing_changes = set()
     
     # Calendar v2.0
     hearings_normalized = set()
+    hearing_bills = set()
 
      # Try connecting to page
     try:
@@ -85,11 +82,13 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
                     )
                     # Extract details like time, location, room
                     try:
-                        current_details = current_hearing.locator(
+                        current_details = scraper_utils.get_hearing_detail(
+                            current_hearing,
                             "div.attribute.page-events__time-location"
-                        ).inner_text()
-                        current_time, current_loc = current_details.split(" - ")
-                        current_time = current_time.replace("Time: ", "")
+                        )
+                        current_time_verbatim, current_loc = current_details.split(" - ")
+                        current_time_verbatim = current_time_verbatim.replace("Time: ", "")
+                        current_time, is_allday = scraper_utils.normalize_hearing_time(current_time_verbatim)
                         current_location, current_room = current_loc.split(", ")
                     except:
                         print(f"No time or location details could be extracted for {current_name} on {current_date}")
@@ -98,37 +97,21 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
 
                     # Extract hearing notes if available
                     current_note = (
-                        current_hearing.locator("div.attribute.note")
-                        .inner_text()
-                        .lower()
+                        scraper_utils.get_hearing_detail(
+                            current_hearing,
+                            "div.attribute.note",
+                            "lower"
+                        )
                     )
 
-                    if len(current_note) and "change" not in current_note:
-                        temp = (
-                            2,
-                            current_date,
-                            current_name,
-                            current_time,
-                            current_location,
-                            current_room,
-                        )
-                        if "canceled" in current_note:
-                            committee_hearing_changes.add((temp + ("canceled",)))
-                        elif "postponed" in current_note:
-                            committee_hearing_changes.add((temp + ("postponed",)))
-                        else:
-                            print("Unparseable note: {}".format(current_note))
-                            print(
-                                "Hearing details: {0}, {1}".format(
-                                    current_date, current_name
-                                )
-                            )
                     # add to hearings_normalized — one row per unique hearing
                     hearings_normalized.add((
                         2,  # chamber_id
                         current_date,
                         current_name,
+                        current_time_verbatim,
                         current_time,
+                        is_allday,
                         current_location,
                         current_room,
                         current_note
@@ -168,8 +151,8 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
                     )
 
                     # Update results with set intersection operation on a set of collected bills/measures
-                    committee_hearing_results = (
-                        committee_hearing_results | current_events_detailed
+                    hearing_bills = (
+                        hearing_bills | current_events_detailed
                     )
 
                     # Close agenda pop-up
@@ -180,8 +163,7 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
         print("Closed Senate browser")
         
         # Concatenate the results into a set
-        final_results = floor_session_results | committee_hearing_results
-        return hearings_normalized, final_results, committee_hearing_changes
+        return hearings_normalized, hearing_bills
 
     except Exception as e:
         print(f"[SEN] Daily File scrape failed: {e}")
@@ -196,12 +178,7 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
     
 
 def main():
-    # final, changes = scrape_committee_hearing()
-    hearings, bills, changes = scrape_committee_hearing(verbose=True)
-    
-    print("Detected changes:")
-    for row in changes:
-        print(row)
+    hearings, bills = scrape_committee_hearing(verbose=True)
 
     print("Detected hearings:")
     for row in hearings:

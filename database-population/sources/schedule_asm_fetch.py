@@ -30,12 +30,8 @@ def scrape_committee_hearing(
         ):
     
     # Initialize 
-    floor_session_results = set()
-    committee_hearing_results = set()
-    committee_hearing_changes = set()
-
-    # Calendar v2.0
     hearings_normalized = set()
+    hearing_bills = set()
 
      # Try connecting to page
     try:
@@ -77,6 +73,8 @@ def scrape_committee_hearing(
             details["date"] = scraper_utils.text_to_date_string(details["date"])
             details["time"] = details["time"].replace("am", " a.m.")
             details["time"] = details["time"].replace("pm", " p.m.")
+            details["time_verbatim"] = details["time"]
+            details["time"], details["is_allday"] = scraper_utils.normalize_hearing_time(details["time"])
             if "," in details["location"]:
                 details["location"], details["room"] = details["location"].split(", ")
             else:
@@ -115,17 +113,19 @@ def scrape_committee_hearing(
                 #     f.write(soup.prettify())
                 # Extract hearing topic if available
                 topics = soup.select("span.HearingTopic")
-                hearing_topic = topics[0].get_text() if topics else ""
+                hearing_notes = topics[0].get_text() if topics else ""
                 
                 # add to hearings_normalized — one row per unique hearing
                 hearings_normalized.add((
                     1,  # chamber_id
                     details["date"],
                     details["name"],
+                    details["time_verbatim"],
                     details["time"],
+                    details["is_allday"],
                     details["location"],
                     details["room"],
-                    hearing_topic
+                    hearing_notes
                 ))
 
                 # Extract measures
@@ -142,8 +142,8 @@ def scrape_committee_hearing(
                 )
 
                 # Update results with set intersection operation on a set of collected bills/measures
-                committee_hearing_results = (
-                    committee_hearing_results | current_events_detailed
+                hearing_bills = (
+                    hearing_bills | current_events_detailed
                 )
 
                 # Close agenda modal
@@ -165,16 +165,10 @@ def scrape_committee_hearing(
         if handler:
             handler.stop()
     # Concatenate the results into a set
-        final_results = floor_session_results | committee_hearing_results
-        return hearings_normalized, final_results, committee_hearing_changes
+        return hearings_normalized, hearing_bills
 
 def main():
-    # final, changes = scrape_committee_hearing()    
-    hearings, bills, changes = scrape_committee_hearing(verbose=True)
-    
-    print("Detected changes:")
-    for row in changes:
-        print(row)
+    hearings, bills = scrape_committee_hearing(verbose=True)
 
     print("Detected hearings:")
     for row in hearings:

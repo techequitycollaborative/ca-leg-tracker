@@ -14,11 +14,9 @@ def run_pipeline(force_update=False):
         # topics
         # topics.update(cur)
 
-        # schedule
-        hearing_schedule, bill_schedule, schedule_changes = schedule.fetch_updates()
+        hearing_schedule, bill_schedule = hearings.fetch_updates()
 
         if len(hearing_schedule):
-            schedule.update(cur, bill_schedule, schedule_changes)
             hearings.update(cur, hearing_schedule, bill_schedule)
 
         # views
