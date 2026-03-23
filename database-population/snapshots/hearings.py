@@ -69,6 +69,24 @@ def update_hearing_committee_ids(cur):
     print("Updated committee IDs where name match found")
     print(cur.statusmessage)
 
+
+
+def update_joint_hearing_chamber_id(cur):
+    update_query = """
+        UPDATE {0}.{1}
+        SET chamber_id = CASE
+            WHEN LOWER(name) LIKE '%assembly%' AND LOWER(name) LIKE '%senate%' THEN 5
+            WHEN chamber_id = 1 THEN 3
+            WHEN chamber_id = 2 THEN 4
+            ELSE chamber_id
+        END
+        WHERE LOWER(name) LIKE '%joint%'
+    """
+    cur.execute(update_query.format(SNAPSHOT_SCHEMA, HEARINGS_TABLE))
+    print("Updated joint hearing chamber IDs")
+    print(cur.statusmessage)
+
+
 def stage_hearing_bills(cur, hearing_bills_data):
     create_query = """
         CREATE TEMPORARY TABLE {0} (
@@ -196,6 +214,7 @@ def update(cur, hearings_data, hearing_bills_data):
     truncate_hearings(cur) # cascades to hearing_bills automatically
     insert_hearings(cur, hearings_data)
     update_hearing_committee_ids(cur)
+    update_joint_hearing_chamber_id(cur)
     hearing_bills_update(cur, hearing_bills_data)
     insert_hearing_deadlines(cur)
     return
