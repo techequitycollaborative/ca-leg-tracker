@@ -39,16 +39,16 @@ def insert_hearings(cur, hearings_data):
     insert_query = """
         INSERT INTO {0}.{1} (
             chamber_id, 
+            name, 
             date, 
             time_verbatim,
             time_normalized,
             is_allday,
-            name, 
             location, 
             room, 
             notes
         )
-        VALUES (%s, %s::DATE, %s, %s::TIME, %s, %s, %s, %s, %s)
+        VALUES (%s, %s, %s::DATE, %s, %s::TIME, %s, %s, %s, %s)
     """
     for row in tqdm(hearings_data):
         cur.execute(insert_query.format(SNAPSHOT_SCHEMA, HEARINGS_TABLE), tuple(row))
@@ -137,7 +137,7 @@ def log_dropped_hearing_bills(cur):
             WHERE s.chamber_id = h.chamber_id
             AND s.event_date = h.date
             AND s.event_text = h.name
-            AND s.event_time = h.time
+            AND s.event_time_verbatim = h.time_verbatim
             AND s.event_location = h.location
             AND s.event_room = h.room
         )
