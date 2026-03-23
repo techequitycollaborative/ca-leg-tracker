@@ -15,14 +15,14 @@ Next, Assembly + Senate websites are scraped to retrieve upcoming hearings and
 the bills that are scheduled for those hearings. To update the snapshot, we
 truncate the existing tables and insert the scraped results.
 
-Finally, the materiralized views maintained in the app schema are refreshed,
+Finally, the materialized views maintained in the app schema are refreshed,
 completing the DB transaction.
 """
 
 import argparse
-import bill_openstates_fetch as openstates
-import committee_bill_asm_fetch as assembly
-import committee_bill_sen_fetch as senate
+import sources.bill_openstates_fetch as openstates
+import sources.schedule_asm_fetch as assembly
+import sources.schedule_sen_fetch as senate
 import pandas as pd
 from config import config
 import psycopg2
@@ -274,20 +274,6 @@ def openstates_update_bill_data(
     print(cur.statusmessage)
 
 
-def fetch_schedule_update():
-    assembly_update, assembly_changes = assembly.scrape_committee_hearing(verbose=True)
-    senate_update, senate_changes = senate.scrape_committee_hearing(verbose=True)
-
-    print(f"{len(assembly_update)} upcoming Assembly events")
-    print(f"{len(senate_update)} upcoming Senate events")
-
-    # join sets before returning
-    final_update = assembly_update | senate_update
-    final_changes = assembly_changes | senate_changes
-
-    return final_update, final_changes
-
-
 def refresh_snapshot_views(cur):
     bills_query = """
         REFRESH MATERIALIZED VIEW CONCURRENTLY {0}.bills_mv
@@ -306,6 +292,20 @@ def refresh_snapshot_views(cur):
     print(cur.statusmessage)
     return
 
+def fetch_schedule_update():
+    assembly_hearings, assembly_update, assembly_changes = assembly.scrape_committee_hearing(verbose=True)
+    senate_hearings, senate_update, senate_changes = senate.scrape_committee_hearing(verbose=True)
+
+    print(f"{len(assembly_hearings)} upcoming Assembly events")
+    print(f"{len(senate_hearings)} upcoming Senate events")
+
+    # join sets before returning
+    final_hearings = assembly_hearings | senate_hearings
+    final_update = assembly_update | senate_update
+    final_changes = assembly_changes | senate_changes
+
+    return final_hearings, final_update, final_changes
+
 
 # global vars for table names used across stages
 MAIN_TABLE = "bill_schedule"
@@ -314,31 +314,6 @@ STAGE_KNOWN_VALID_TABLE = "stage_known_valid_" + MAIN_TABLE
 STAGE_NEW_TABLE = "stage_new_" + MAIN_TABLE
 STAGE_NEW_ID_TABLE = "stage_new_id_" + MAIN_TABLE
 STAGE_NEW_VALID_TABLE = "stage_new_valid_" + MAIN_TABLE
-
-
-def establish_schedule(cur):
-    # constraint bill_schedule_aux helps with edge case 1
-    create_query = """
-        CREATE TABLE IF NOT EXISTS {0}.{1} 
-        (
-            bill_schedule_id SERIAL PRIMARY KEY,
-            openstates_bill_id TEXT,
-            chamber_id INT,
-            event_date DATE,
-            event_text TEXT,
-            agenda_order INT,
-            event_time TEXT,
-            event_location TEXT,
-            event_room TEXT,
-            revised BOOLEAN DEFAULT FALSE,
-            event_status TEXT DEFAULT 'active',
-            CONSTRAINT bill_schedule_core UNIQUE(openstates_bill_id, chamber_id, event_date, event_text),
-            CONSTRAINT bill_schedule_aux UNIQUE(openstates_bill_id, chamber_id, event_date, event_text, agenda_order, event_time, event_location, event_room)
-        );
-    """
-    cur.execute(create_query.format(SNAPSHOT_SCHEMA, MAIN_TABLE))
-    print(cur.statusmessage)
-    return
 
 
 def stage_known_schedule(cur, dev):
@@ -591,9 +566,6 @@ def remove_staging_table(cur):
 
 
 def bill_schedule_update(cur, schedule_data, schedule_changes, dev=True):
-    # establish that the table exists
-    establish_schedule(cur)
-
     # stage existing events to temp table STAGE_KNOWN
     stage_known_schedule(cur, dev)
 
@@ -618,6 +590,155 @@ def bill_schedule_update(cur, schedule_data, schedule_changes, dev=True):
     # remove staging tables
     remove_staging_table(cur)
 
+    return
+
+
+HEARINGS_TABLE = "hearings"
+
+def truncate_hearings(cur):
+    truncate_query = "TRUNCATE TABLE {0}.{1} RESTART IDENTITY CASCADE"
+    cur.execute(truncate_query.format(SNAPSHOT_SCHEMA, HEARINGS_TABLE))
+    print("Truncated hearings table")
+    print(cur.statusmessage)
+
+
+def insert_hearings(cur, hearings_data):
+    insert_query = """
+        INSERT INTO {0}.{1} (chamber_id, date, name, time, location, room, notes)
+        VALUES (%s, %s::DATE, %s, %s, %s, %s, %s)
+    """
+    for row in tqdm(hearings_data):
+        cur.execute(insert_query.format(SNAPSHOT_SCHEMA, HEARINGS_TABLE), tuple(row))
+    print(f"Inserted {len(hearings_data)} hearings")
+    print(cur.statusmessage)
+
+
+def update_hearing_committee_ids(cur):
+    update_query = """
+        UPDATE {0}.{1} h
+        SET committee_id = c.committee_id
+        FROM {0}.committee c
+        WHERE h.name = c.name
+        AND h.chamber_id = c.chamber_id
+        AND h.committee_id IS NULL
+    """
+    cur.execute(update_query.format(SNAPSHOT_SCHEMA, HEARINGS_TABLE))
+    print("Updated committee IDs where name match found")
+    print(cur.statusmessage)
+
+HEARING_BILLS_TABLE = "hearing_bills"
+STAGE_HEARING_BILLS_TABLE = "stage_" + HEARING_BILLS_TABLE
+
+def stage_hearing_bills(cur, hearing_bills_data):
+    create_query = """
+        CREATE TEMPORARY TABLE {0} (
+            chamber_id INT,
+            event_date DATE,
+            event_text TEXT,
+            bill_number TEXT,
+            file_order INT,
+            event_time TEXT,
+            event_location TEXT,
+            event_room TEXT
+        );
+    """
+    cur.execute(create_query.format(STAGE_HEARING_BILLS_TABLE))
+
+    insert_query = """
+        INSERT INTO {0} (chamber_id, event_date, event_text, bill_number, file_order, event_time, event_location, event_room)
+        VALUES (%s, %s::DATE, %s, %s, %s::INT, %s, %s, %s)
+    """
+    for row in tqdm(hearing_bills_data):
+        cur.execute(insert_query.format(STAGE_HEARING_BILLS_TABLE), tuple(row))
+    print(f"Staged {len(hearing_bills_data)} hearing bill rows")
+
+
+def insert_hearing_bills(cur):
+    insert_query = """
+        WITH resolved AS (
+            SELECT
+                h.hearing_id,
+                b.openstates_bill_id,
+                s.file_order
+            FROM {0} s
+            JOIN {1}.{2} h
+                ON s.chamber_id = h.chamber_id
+                AND s.event_date = h.date
+                AND s.event_text = h.name
+                AND s.event_time = h.time
+                AND s.event_location = h.location
+                AND s.event_room = h.room
+            JOIN {1}.bill b
+                ON s.bill_number = b.bill_num
+                AND b.session = '{3}'
+        )
+        INSERT INTO {1}.{4} (hearing_id, openstates_bill_id, file_order)
+        SELECT hearing_id, openstates_bill_id, file_order
+        FROM resolved;
+    """
+    cur.execute(insert_query.format(
+        STAGE_HEARING_BILLS_TABLE,
+        SNAPSHOT_SCHEMA,
+        HEARINGS_TABLE,
+        CURRENT_SESSION,
+        HEARING_BILLS_TABLE
+    ))
+    print("Inserted hearing bills")
+    print(cur.statusmessage)
+
+
+def log_dropped_hearing_bills(cur):
+    # Log rows that failed to join on either hearing or bill
+    log_query = """
+        SELECT s.bill_number, s.event_text, s.event_date, s.chamber_id
+        FROM {0} s
+        WHERE NOT EXISTS (
+            SELECT FROM {1}.{2} h
+            WHERE s.chamber_id = h.chamber_id
+            AND s.event_date = h.date
+            AND s.event_text = h.name
+            AND s.event_time = h.time
+            AND s.event_location = h.location
+            AND s.event_room = h.room
+        )
+        OR NOT EXISTS (
+            SELECT FROM {1}.bill b
+            WHERE s.bill_number = b.bill_num
+            AND b.session = '{3}'
+        );
+    """
+    cur.execute(log_query.format(
+        STAGE_HEARING_BILLS_TABLE,
+        SNAPSHOT_SCHEMA,
+        HEARINGS_TABLE,
+        CURRENT_SESSION
+    ))
+    dropped = cur.fetchall()
+    if dropped:
+        print(f"WARNING: {len(dropped)} hearing bill rows could not be matched and were dropped:")
+        for row in dropped:
+            print(f"  bill={row[0]}, hearing={row[1]}, date={row[2]}, chamber={row[3]}")
+    else:
+        print("All hearing bill rows matched successfully")
+
+
+def drop_stage_hearing_bills(cur):
+    cur.execute(f"DROP TABLE IF EXISTS {STAGE_HEARING_BILLS_TABLE}")
+    print(cur.statusmessage)
+
+
+def hearing_bills_update(cur, hearing_bills_data):
+    stage_hearing_bills(cur, hearing_bills_data)
+    log_dropped_hearing_bills(cur)
+    insert_hearing_bills(cur)
+    drop_stage_hearing_bills(cur)
+    return
+
+def hearings_update(cur, hearings_data, hearing_bills_data):
+    truncate_hearings(cur) # cascades to hearing_bills automatically
+    insert_hearings(cur, hearings_data)
+    update_hearing_committee_ids(cur)
+    hearing_bills_update(cur, hearing_bills_data)
     return
 
 
@@ -695,11 +816,13 @@ def main():
             )
             
         # Update hearings and bill schedules
-        schedule_updates, schedule_changes = fetch_schedule_update()
+        hearing_schedule, bill_schedule, schedule_changes = fetch_schedule_update()
 
-        if len(schedule_updates):  # Check if we have stuff before updating tables
+        if len(hearing_schedule):  # Check if we have stuff before updating tables
             print("Updating bill schedule for both chambers...")
-            bill_schedule_update(cur, schedule_updates, schedule_changes)
+            # TODO: deprecate after calendar v2.0 deployment
+            bill_schedule_update(cur, bill_schedule, schedule_changes)
+            hearings_update(cur, hearing_schedule, bill_schedule)
         else:
             print("No schedule updates; finishing")
 
