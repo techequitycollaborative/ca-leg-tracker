@@ -84,7 +84,8 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
                     try:
                         current_details = scraper_utils.get_hearing_detail(
                             current_hearing,
-                            "div.attribute.page-events__time-location"
+                            "div.attribute.page-events__time-location",
+                            False
                         )
                         current_time_verbatim, current_loc = current_details.split(" - ")
                         current_time_verbatim = current_time_verbatim.replace("Time: ", "")

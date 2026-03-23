@@ -54,7 +54,7 @@ def normalize_hearing_time(time_str):
 
     for fmt in ('%I:%M %p', '%I %p'):
         try:
-            return datetime.strptime(normalized, fmt).strftime('%H:%M:%S'), False
+            return datetime.datetime.strptime(normalized, fmt).strftime('%H:%M:%S'), False
         except ValueError:
             continue
 
