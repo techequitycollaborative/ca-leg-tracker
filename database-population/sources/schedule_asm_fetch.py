@@ -138,7 +138,7 @@ def scrape_committee_hearing(
                 )
 
                 current_events_detailed = scraper_utils.add_measure_details(
-                    details["time"], details["location"], details["room"], hearing_bills
+                    details["time_verbatim"], details["location"], details["room"], hearing_bills
                 )
 
                 # Update results with set intersection operation on a set of collected bills/measures

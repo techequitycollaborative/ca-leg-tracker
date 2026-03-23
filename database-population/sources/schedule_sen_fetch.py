@@ -148,7 +148,7 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
 
                     # Expand the tuples with all details
                     current_events_detailed = scraper_utils.add_measure_details(
-                        current_time, current_location, current_room, current_events
+                        current_time_verbatim, current_location, current_room, current_events
                     )
 
                     # Update results with set intersection operation on a set of collected bills/measures

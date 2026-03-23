@@ -18,8 +18,8 @@ def fetch_updates():
     assembly_hearings, assembly_bills = assembly.scrape_committee_hearing(verbose=True)
     senate_hearings, senate_bills = senate.scrape_committee_hearing(verbose=True)
 
-    print(f"{len(assembly_hearings)} upcoming Assembly events")
-    print(f"{len(senate_hearings)} upcoming Senate events")
+    print(f"[ASM] {len(assembly_hearings)} hearings; {len(assembly_bills)} bills retrieved")
+    print(f"[SEN] {len(senate_hearings)} hearings; {len(senate_bills)} bills retrieved")
 
     # join sets before returning
     final_hearings = assembly_hearings | senate_hearings
@@ -77,7 +77,7 @@ def stage_hearing_bills(cur, hearing_bills_data):
             event_text TEXT,
             bill_number TEXT,
             file_order INT,
-            event_time TEXT,
+            event_time_verbatim TEXT,
             event_location TEXT,
             event_room TEXT
         );
@@ -85,7 +85,7 @@ def stage_hearing_bills(cur, hearing_bills_data):
     cur.execute(create_query.format(STAGE_HEARING_BILLS_TABLE))
 
     insert_query = """
-        INSERT INTO {0} (chamber_id, event_date, event_text, bill_number, file_order, event_time, event_location, event_room)
+        INSERT INTO {0} (chamber_id, event_date, event_text, bill_number, file_order, event_time_verbatim, event_location, event_room)
         VALUES (%s, %s::DATE, %s, %s, %s::INT, %s, %s, %s)
     """
     for row in tqdm(hearing_bills_data):
@@ -105,7 +105,7 @@ def insert_hearing_bills(cur):
                 ON s.chamber_id = h.chamber_id
                 AND s.event_date = h.date
                 AND s.event_text = h.name
-                AND s.event_time = h.time
+                AND s.event_time_verbatim = h.time_verbatim
                 AND s.event_location = h.location
                 AND s.event_room = h.room
             JOIN {1}.bill b
