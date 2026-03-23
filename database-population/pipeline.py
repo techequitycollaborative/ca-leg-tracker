@@ -1,4 +1,4 @@
-from snapshots import bills, schedule, hearings, topics
+from snapshots import bills, hearings, topics
 from refresh import views
 import db
 
