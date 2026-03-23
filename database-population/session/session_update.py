@@ -22,7 +22,7 @@ from session.snapshots.contacts import fetch_codex_updates, codex_upsert_contact
 def run_session_update(force_update=False):
     conn = None
     try:
-        params = config("postgresql")
+        params = config("postgres")
         conn = psycopg2.connect(**params)
         cur = conn.cursor()
 

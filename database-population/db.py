@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 def get_cursor():
     conn = None
     try:
-        params = config("postgresql")
+        params = config("postgres")
         conn = psycopg2.connect(**params)
         cur = conn.cursor()
         yield cur
