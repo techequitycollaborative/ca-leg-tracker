@@ -139,6 +139,24 @@ def drop_stage_hearing_bills(cur):
     print(cur.statusmessage)
 
 
+DEADLINE_LEAD_DAYS = 7
+DEADLINE_TYPE = "letter"
+
+def insert_hearing_deadlines(cur, lead_days=DEADLINE_LEAD_DAYS, deadline_type=DEADLINE_TYPE):
+    insert_query = """
+        INSERT INTO {0}.hearing_deadlines (hearing_id, deadline_date, deadline_type)
+        SELECT
+            h.hearing_id,
+            h.date - INTERVAL '{1} days' AS deadline_date,
+            %s AS deadline_type
+        FROM {0}.hearings h
+        ON CONFLICT ON CONSTRAINT unique_deadline DO NOTHING;
+    """
+    cur.execute(insert_query.format(SNAPSHOT_SCHEMA, lead_days), (deadline_type,))
+    print(f"Inserted hearing deadlines ({lead_days} day lead, type='{deadline_type}')")
+    print(cur.statusmessage)
+    
+
 def hearing_bills_update(cur, hearing_bills_data):
     stage_hearing_bills(cur, hearing_bills_data)
     log_dropped_hearing_bills(cur)
@@ -151,4 +169,5 @@ def update(cur, hearings_data, hearing_bills_data):
     insert_hearings(cur, hearings_data)
     update_hearing_committee_ids(cur)
     hearing_bills_update(cur, hearing_bills_data)
+    insert_hearing_deadlines(cur)
     return
