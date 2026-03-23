@@ -111,7 +111,9 @@ def scrape_committee_hearing(
                 # with open(f"ASM_agenda-{i}.html", "w", encoding="utf-8") as f:
                 #     f.write(soup.prettify())
                 # Extract hearing topic if available
-                hearing_topic = soup.select("span.HearingTopic")[0].get_text()
+                topics = soup.select("span.HearingTopic")
+                hearing_topic = topics[0].get_text() if topics else ""
+                
                 # add to hearings_normalized — one row per unique hearing
                 hearings_normalized.add((
                     1,  # chamber_id
@@ -164,15 +166,19 @@ def scrape_committee_hearing(
         return hearings_normalized, final_results, committee_hearing_changes
 
 def main():
-    # final, changes = scrape_committee_hearing()
-    final, changes = scrape_committee_hearing(verbose=True)
+    # final, changes = scrape_committee_hearing()    
+    hearings, bills, changes = scrape_committee_hearing(verbose=True)
     
     print("Detected changes:")
     for row in changes:
         print(row)
 
+    print("Detected hearings:")
+    for row in hearings:
+        print(row)
+
     print("Detected bills scheduled for hearing:")
-    for row in final:
+    for row in bills:
         print(row)
 
 if __name__ == "__main__":
