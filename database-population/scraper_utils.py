@@ -3,12 +3,13 @@ General functions for Daily File scraper programs
 """
 
 from bs4 import BeautifulSoup as bs
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, Locator
 from dateutil import parser
 import datetime
 import urllib.request
 import random
 from time import sleep
+from typing import Callable
 
 USERAGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
@@ -16,6 +17,12 @@ USERAGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'
 ]
+
+detail_fns = {
+    "strip": lambda x: x.strip(),
+    "title": lambda x: x.strip().title()
+}
+
 def get_start_end_query(source_url):
     start_date = datetime.date.today()
     end_date = start_date + datetime.timedelta(days=30)
@@ -42,6 +49,16 @@ def text_to_date_string(s):
     except ValueError:  # TODO: define more helpful behavior
         pass
 
+def get_hearing_detail(
+        hearing: Locator, 
+        selector: str,
+        transform="strip"
+        ):
+    result = hearing.locator(selector).inner_text().strip()
+    if transform:
+        return detail_fns[transform](result)
+    else:
+        return result
 
 def prettify_structure(content):
     """
