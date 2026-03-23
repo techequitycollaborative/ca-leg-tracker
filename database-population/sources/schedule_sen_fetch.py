@@ -30,7 +30,7 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
     
     # Calendar v2.0
     hearings_normalized = set()
-    hearing_bills = set()
+    bills_natural_key = set()
 
      # Try connecting to page
     try:
@@ -108,8 +108,8 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
                     # add to hearings_normalized — one row per unique hearing
                     hearings_normalized.add((
                         2,  # chamber_id
-                        current_date,
                         current_name,
+                        current_date,
                         current_time_verbatim,
                         current_time,
                         is_allday,
@@ -152,8 +152,8 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
                     )
 
                     # Update results with set intersection operation on a set of collected bills/measures
-                    hearing_bills = (
-                        hearing_bills | current_events_detailed
+                    bills_natural_key = (
+                        bills_natural_key | current_events_detailed
                     )
 
                     # Close agenda pop-up
@@ -164,7 +164,7 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
         print("Closed Senate browser")
         
         # Concatenate the results into a set
-        return hearings_normalized, hearing_bills
+        return hearings_normalized, bills_natural_key
 
     except Exception as e:
         print(f"[SEN] Daily File scrape failed: {e}")

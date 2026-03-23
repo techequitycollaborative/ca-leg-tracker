@@ -31,7 +31,7 @@ def scrape_committee_hearing(
     
     # Initialize 
     hearings_normalized = set()
-    hearing_bills = set()
+    bills_natural_key = set()
 
      # Try connecting to page
     try:
@@ -74,7 +74,7 @@ def scrape_committee_hearing(
             details["time"] = details["time"].replace("am", " a.m.")
             details["time"] = details["time"].replace("pm", " p.m.")
             details["time_verbatim"] = details["time"]
-            details["time"], details["is_allday"] = scraper_utils.normalize_hearing_time(details["time"])
+            details["time_normalized"], details["is_allday"] = scraper_utils.normalize_hearing_time(details["time_verbatim"])
             if "," in details["location"]:
                 details["location"], details["room"] = details["location"].split(", ")
             else:
@@ -118,10 +118,10 @@ def scrape_committee_hearing(
                 # add to hearings_normalized — one row per unique hearing
                 hearings_normalized.add((
                     1,  # chamber_id
-                    details["date"],
                     details["name"],
+                    details["date"],
                     details["time_verbatim"],
-                    details["time"],
+                    details["time_normalized"],
                     details["is_allday"],
                     details["location"],
                     details["room"],
@@ -142,8 +142,8 @@ def scrape_committee_hearing(
                 )
 
                 # Update results with set intersection operation on a set of collected bills/measures
-                hearing_bills = (
-                    hearing_bills | current_events_detailed
+                bills_natural_key = (
+                    bills_natural_key | current_events_detailed
                 )
 
                 # Close agenda modal
@@ -165,7 +165,7 @@ def scrape_committee_hearing(
         if handler:
             handler.stop()
     # Concatenate the results into a set
-        return hearings_normalized, hearing_bills
+        return hearings_normalized, bills_natural_key
 
 def main():
     hearings, bills = scrape_committee_hearing(verbose=True)
