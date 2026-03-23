@@ -82,7 +82,7 @@ def get_hearing_detail(
         selector: str,
         transform="strip"
         ):
-    result = hearing.locator(selector).inner_text().strip()
+    result = hearing.locator(selector).inner_text().replace("\n", " ")
     if transform:
         return detail_fns[transform](result)
     else:
