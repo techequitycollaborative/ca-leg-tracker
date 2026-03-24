@@ -1,6 +1,0 @@
-services:
-  pipeline:
-    build: .
-    volumes:
-      - ./database-population/credentials.ini:/app/credentials.ini:ro
-    restart: "no"

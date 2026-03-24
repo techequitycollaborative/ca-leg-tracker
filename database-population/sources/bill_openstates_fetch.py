@@ -1,14 +1,10 @@
 """
 Parameters and functions that directly fetch from Openstates via GET requests.
-
-Called in bill_daily_update.py
 """
-
-import json
 from config import config
 from time import sleep
 import requests
-
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 # Global constants
 
@@ -148,14 +144,19 @@ def process_bill_json(data, last_update):
     }
 
 
+@retry(
+    retry=retry_if_exception_type((requests.exceptions.RequestException, ValueError, KeyError)),
+    wait=wait_exponential(multiplier=1, min=10, max=60),
+    stop=stop_after_attempt(3)
+)
 def fetch_bill_batch(page, updated_since):
     """
     Input: page number, timestamp
     Output: JSON API response, max page number
 
-    Update API request parameters with page number and timestamp value (optional), and execute GET request
+    Update API request parameters with page number and timestamp value (optional), and execute GET request.
+    Retries up to 3 times on network errors or malformed responses.
     """
-    # Sleep to avoid timeout errors
     sleep(WAIT_TIME)
 
     params = BASE_PARAMS
