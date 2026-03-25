@@ -21,7 +21,7 @@ of bills into a utils function, which returns a set of tuples in the shape (DATE
 """
 
 from bs4 import BeautifulSoup as bs
-import scraper_utils
+import utils.scraping as utils
 
 # TODO: refactor with Python classes for readability
 def scrape_committee_hearing(
@@ -35,7 +35,7 @@ def scrape_committee_hearing(
 
      # Try connecting to page
     try:
-        browser, page, handler = scraper_utils.make_page(source_url)
+        browser, page, handler = utils.make_page(source_url)
 
         # Close welcome message if detected
         page.wait_for_selector("div.ui-dialog.was-welcome-message-modal.ui-widget.ui-widget-content.ui-front")
@@ -64,17 +64,17 @@ def scrape_committee_hearing(
             # get date, name, time, location
             details = {}
             for detail in ["date", "time", "name", "location"]:
-                details[detail] = scraper_utils.get_hearing_detail(
+                details[detail] = utils.get_hearing_detail(
                     current_hearing,
                     f"td.committee_hearing-{detail}"
                 )
             
             # normalize details
-            details["date"] = scraper_utils.text_to_date_string(details["date"])
+            details["date"] = utils.text_to_date_string(details["date"])
             details["time"] = details["time"].replace("am", " a.m.")
             details["time"] = details["time"].replace("pm", " p.m.")
             details["time_verbatim"] = details["time"]
-            details["time_normalized"], details["is_allday"] = scraper_utils.normalize_hearing_time(details["time_verbatim"])
+            details["time_normalized"], details["is_allday"] = utils.normalize_hearing_time(details["time_verbatim"])
             if "," in details["location"]:
                 details["location"], details["room"] = details["location"].split(", ")
             else:
@@ -82,7 +82,7 @@ def scrape_committee_hearing(
            
             # click three-dot menu
             hearing_menu = current_hearing.locator("button").first
-            scraper_utils.page_click(hearing_menu)
+            utils.page_click(hearing_menu)
 
             # Check if View Agenda is on the menu, else skip it
             row_menu = current_hearing.locator("div.was-dropdown-menu.dd-show")
@@ -98,7 +98,7 @@ def scrape_committee_hearing(
             else:
                 print("Clicking current hearing agenda")
                 agenda_link = current_hearing.locator('a[href*="/api/dailyfile/agenda"]')
-                scraper_utils.page_click(agenda_link, force=True)
+                utils.page_click(agenda_link, force=True)
     
                 # Wait for the modal to be visible
                 page.wait_for_selector("div.agenda-container", state="visible", timeout=5000)
@@ -133,11 +133,11 @@ def scrape_committee_hearing(
                 if verbose:
                     print("Found {} measures".format(len(measure_selector)))
 
-                hearing_bills = scraper_utils.collect_measure_info(
+                hearing_bills = utils.collect_measure_info(
                     details["date"], details["name"], measure_selector, 1
                 )
 
-                current_events_detailed = scraper_utils.add_measure_details(
+                current_events_detailed = utils.add_measure_details(
                     details["time_verbatim"], details["location"], details["room"], hearing_bills
                 )
 

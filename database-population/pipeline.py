@@ -1,9 +1,18 @@
 from snapshots import bills, hearings, topics
 from refresh import views
 import db
+import datetime as dt
 
 def run_pipeline(force_update=False):
     with db.get_cursor() as cur:
+        # log today's date
+        timestamp = dt.datetime.now(dt.timezone.utc)
+        print(f"""
+              #####################
+              STARTING DAILY LEGISLATION DATA UPDATES...
+              CURRENT TIMESTAMP: {timestamp.strftime('%Y-%m-%d %I:%M%p')}
+              #####################
+            """)
         # bills
         last_update = bills.get_last_update_timestamp(cur)
         bill_updates = bills.fetch_updates(last_update)
