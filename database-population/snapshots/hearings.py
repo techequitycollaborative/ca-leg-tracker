@@ -75,7 +75,8 @@ def update_joint_hearing_chamber_id(cur):
     update_query = """
         UPDATE {0}.{1}
         SET chamber_id = CASE
-            WHEN LOWER(name) LIKE '%assembly%' AND LOWER(name) LIKE '%senate%' THEN 5
+            WHEN LOWER(name) LIKE '%joint legislative audit%' THEN 5
+            OR (LOWER(name) LIKE '%assembly%' AND LOWER(name) LIKE '%senate%') THEN 5
             WHEN chamber_id = 1 THEN 3
             WHEN chamber_id = 2 THEN 4
             ELSE chamber_id

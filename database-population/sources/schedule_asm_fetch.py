@@ -57,8 +57,6 @@ def scrape_committee_hearing(
 
         # for each hearing
         for i in range(hearing_count):
-            # Refetch
-            # hearing_rows = page.locator("tr.committee-hearing-details")
             current_hearing = hearing_rows.nth(i)
 
             # get date, name, time, location
@@ -75,7 +73,8 @@ def scrape_committee_hearing(
             details["time"] = details["time"].replace("pm", " p.m.")
             details["time_verbatim"] = details["time"]
             details["time_normalized"], details["is_allday"] = utils.normalize_hearing_time(details["time_verbatim"])
-            if "," in details["location"]:
+            # Only parse the 'normal' locations with typical address + room number
+            if details["location"].count(",") == 1:
                 details["location"], details["room"] = details["location"].split(", ")
             else:
                 details["room"] = ""
@@ -113,7 +112,7 @@ def scrape_committee_hearing(
                 #     f.write(soup.prettify())
                 # Extract hearing topic if available
                 topics = soup.select("span.HearingTopic")
-                hearing_notes = topics[0].get_text() if topics else ""
+                hearing_notes = topics[0].get_text().lower().strip() if topics else ""
                 
                 # add to hearings_normalized — one row per unique hearing
                 hearings_normalized.add((
@@ -171,11 +170,11 @@ def main():
     hearings, bills = scrape_committee_hearing(verbose=True)
 
     print("Detected hearings:")
-    for row in hearings:
+    for row in sorted(hearings, key=lambda x: x[2]):
         print(row)
 
     print("Detected bills scheduled for hearing:")
-    for row in bills:
+    for row in sorted(bills, key=lambda x: (x[2], x[4])):
         print(row)
 
 if __name__ == "__main__":

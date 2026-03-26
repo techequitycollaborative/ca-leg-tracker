@@ -90,7 +90,11 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
                         current_time_verbatim, current_loc = current_details.split(" - ")
                         current_time_verbatim = current_time_verbatim.replace("Time: ", "")
                         current_time, is_allday = utils.normalize_hearing_time(current_time_verbatim)
-                        current_location, current_room = current_loc.split(", ")
+                        if current_loc.count(",") == 1:
+                            current_location, current_room = current_loc.split(", ")
+                        else:
+                            current_location = current_loc
+                            current_room = ""
                     except:
                         print(f"No time or location details could be extracted for {current_name} on {current_date}")
                         print(current_details)
@@ -182,11 +186,11 @@ def main():
     hearings, bills = scrape_committee_hearing(verbose=True)
 
     print("Detected hearings:")
-    for row in hearings:
+    for row in sorted(hearings, key=lambda x: x[2]):
         print(row)
 
     print("Detected bills scheduled for hearing:")
-    for row in bills:
+    for row in sorted(bills, key=lambda x: (x[2], x[4])):
         print(row)
 
 if __name__ == "__main__":

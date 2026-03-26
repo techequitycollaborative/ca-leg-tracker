@@ -10,6 +10,7 @@ APP_SCHEMA = config("postgresql_schemas")["app_schema"]
 MATERIALIZED_VIEWS = [
     "bills_mv",
     "bill_history_mv",
+    "committees_mv",
     "calendar_mv",
 ]
 
