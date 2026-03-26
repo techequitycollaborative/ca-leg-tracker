@@ -152,7 +152,7 @@ def page_click(clickable, force=False):
         return e
 
 
-def make_page(url, max_retries=3, timeout=30000, headless=True):
+def make_page(url, max_retries=3, timeout=50000, headless=True):
     """
     Args:
         url: target webpage
@@ -194,7 +194,7 @@ def make_page(url, max_retries=3, timeout=30000, headless=True):
                 # Attempt navigation
                 response = page.goto(
                     url,
-                    wait_until="networkidle",
+                    wait_until="domcontentloaded",
                     referer="https://www.google.com"
                 )
                 # Log error if not successful
