@@ -90,7 +90,7 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
                         current_time_verbatim, current_loc = current_details.split(" - ")
                         current_time_verbatim = current_time_verbatim.replace("Time: ", "")
                         current_time, is_allday = utils.normalize_hearing_time(current_time_verbatim)
-                        if current_loc.count(",") == 1:
+                        if current_loc.count(",") == 1 and "Room" in current_loc:
                             current_location, current_room = current_loc.split(", ")
                         else:
                             current_location = current_loc

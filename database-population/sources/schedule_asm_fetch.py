@@ -74,7 +74,7 @@ def scrape_committee_hearing(
             details["time_verbatim"] = details["time"]
             details["time_normalized"], details["is_allday"] = utils.normalize_hearing_time(details["time_verbatim"])
             # Only parse the 'normal' locations with typical address + room number
-            if details["location"].count(",") == 1:
+            if details["location"].count(",") == 1 and "Room" in details["location"]:
                 details["location"], details["room"] = details["location"].split(", ")
             else:
                 details["room"] = ""
@@ -86,15 +86,15 @@ def scrape_committee_hearing(
             # Check if View Agenda is on the menu, else skip it
             row_menu = current_hearing.locator("div.was-dropdown-menu.dd-show")
             row_menu_contents = row_menu.inner_html()
-            
+            hearing_notes = "" # default value
+
             if "View Agenda" not in row_menu_contents:
                 if verbose:
-                    print(f"No agenda found for {details["name"]}, moving on")
+                    print(f"No agenda found for {details["name"]}")
                 # Close the dropdown menu by clicking the button again
                 hearing_menu.click()
                 page.wait_for_timeout(500)
-                continue
-            else:
+            else: # Check for bills on the hearing agenda
                 print("Clicking current hearing agenda")
                 agenda_link = current_hearing.locator('a[href*="/api/dailyfile/agenda"]')
                 utils.page_click(agenda_link, force=True)
@@ -113,19 +113,6 @@ def scrape_committee_hearing(
                 # Extract hearing topic if available
                 topics = soup.select("span.HearingTopic")
                 hearing_notes = topics[0].get_text().lower().strip() if topics else ""
-                
-                # add to hearings_normalized — one row per unique hearing
-                hearings_normalized.add((
-                    1,  # chamber_id
-                    details["name"],
-                    details["date"],
-                    details["time_verbatim"],
-                    details["time_normalized"],
-                    details["is_allday"],
-                    details["location"],
-                    details["room"],
-                    hearing_notes
-                ))
 
                 # Extract measures
                 measure_selector = soup.select("span.measureLink")
@@ -152,6 +139,19 @@ def scrape_committee_hearing(
                 # Close the dropdown menu by clicking the button again
                 hearing_menu.click()
                 page.wait_for_timeout(500)
+
+            # Always add to hearings_normalized — one row per unique hearing
+            hearings_normalized.add((
+                1,  # chamber_id
+                details["name"],
+                details["date"],
+                details["time_verbatim"],
+                details["time_normalized"],
+                details["is_allday"],
+                details["location"],
+                details["room"],
+                hearing_notes
+            ))
 
     except Exception as e:
         print(f"[ASM] Daily File scrape failed: {e}")
