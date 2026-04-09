@@ -10,7 +10,9 @@ import urllib.request
 import random
 from time import sleep
 import re
+import logging
 
+logger = logging.getLogger(__name__)
 USERAGENTS = [
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
@@ -67,7 +69,7 @@ def normalize_hearing_time(time_str):
             continue
 
     # If parsing fails, preserve as all-day and log
-    print(f"WARNING: could not parse time string '{time_str}', treating as all-day")
+    logger.warning(f"WARNING: could not parse time string '{time_str}', treating as all-day")
     return None, True
 
 
@@ -82,7 +84,7 @@ def text_to_date_string(s):
         dt = parser.parse(s)
         return dt.strftime("%Y-%m-%d")
     except ValueError:
-        print(f"WARNING: could not parse date string {s}")
+        logger.warning(f"WARNING: could not parse date string {s}")
         return None
 
 
@@ -154,7 +156,7 @@ def page_click(clickable, force=False):
         clickable.wait_for(state="visible", timeout=5000)
         clickable.click(force=force)
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"{str(e)}")
         return e
 
 
@@ -203,7 +205,7 @@ def make_page(url, max_retries=3, timeout=30000, headless=True):
 
                 # Randomized delay
                 delay = random.uniform(0.5, 3)
-                print(f"Attempt {attempt+1}: Delay {delay:.2f}s ({user_agent[:30]}...)")
+                logger.info(f"Attempt {attempt+1}: Delay {delay:.2f}s ({user_agent[:30]}...)")
                 sleep(delay)
 
                 # Attempt navigation
@@ -215,20 +217,20 @@ def make_page(url, max_retries=3, timeout=30000, headless=True):
                     raise Exception(f"HTTP {response.status}")
 
                 # Log success and return
-                print(f"Success with user agent: {user_agent[:50]}...")
+                logger.info(f"Success with user agent: {user_agent[:50]}...")
                 return browser, page, handler
 
             except TimeoutError:
-                print(
+                logger.warning(
                     f"Attempt {attempt + 1}/{max_retries} failed with UA: {user_agent[:50]}..."
                 )
                 if browser:
                     browser.close()
                 if attempt == max_retries - 1:
-                    print(f"Max retries reached for this UA, trying next...")
+                    logger.warning(f"Max retries reached for this UA, trying next...")
                 continue
             except Exception as e:
-                print(
+                logger.warning(
                     f"Attempt {attempt} failed ({user_agent[:30]}...): {str(e)[:100]}"
                 )
                 if browser:
@@ -236,7 +238,7 @@ def make_page(url, max_retries=3, timeout=30000, headless=True):
                 if handler:
                     handler.stop()
                 if attempt == max_retries:
-                    print(f"Exhausted retries for agent: {user_agent[:30]}...")
+                    logger.warning(f"Exhausted retries for agent: {user_agent[:30]}...")
 
     raise Exception("All user agents failed")
 

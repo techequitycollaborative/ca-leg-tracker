@@ -19,7 +19,9 @@ function, which returns a set of tuples in the shape (DATE, EVENT_TEXT, BILL_NUM
 
 from bs4 import BeautifulSoup as bs
 import utils.scraping as utils
+import logging
 
+logger = logging.getLogger(__name__)
 
 # TODO: refactor with Python classes for readability
 def scrape_committee_hearing(
@@ -28,8 +30,8 @@ def scrape_committee_hearing(
     # Generate start and end dates for a query on the Senate calendar
     start_date, end_date, query_url = utils.get_start_end_query(source_url)
     if verbose:
-        print("Querying for Senate events from {} to {}".format(start_date, end_date))
-        print(query_url)
+        logger.info("Querying for Senate events from {} to {}".format(start_date, end_date))
+        logger.info(query_url)
 
     # Calendar v2.0
     hearings_normalized = set()
@@ -41,11 +43,11 @@ def scrape_committee_hearing(
         # iterate over date wrapper blocks
         page.wait_for_selector("div.page-events--day-wrapper")
         if verbose:
-            print("Found events by date")
+            logger.info("Found events by date")
         wrappers = page.locator("div.page-events--day-wrapper")
         wrapper_count = wrappers.count()
 
-        print("Preparing to scrape Senate Daily File")
+        logger.info("Preparing to scrape Senate Daily File")
         for i in range(wrapper_count):
             # Extract current date
             current_wrapper = wrappers.nth(i)
@@ -53,15 +55,15 @@ def scrape_committee_hearing(
                 current_wrapper.locator("h2.page-events__date").first.inner_text()
             )
             if verbose:
-                print("Extracting {}".format(current_date))
+                logger.info("Extracting {}".format(current_date))
             # Detect empty content
             empty_wrapper = page.locator("div.no-results-message")
 
             if empty_wrapper.count() > 0:
-                print(f"No events scheduled for {current_date}")
+                logger.info(f"No events scheduled for {current_date}")
             else:
                 if verbose:
-                    print("Looking for events")
+                    logger.info("Looking for events")
 
                 # Examine committee hearing content
                 committee_hearing_section = current_wrapper.locator(
@@ -71,7 +73,7 @@ def scrape_committee_hearing(
                     "div.page-events__item.page-events__item--committee-hearing"
                 )
                 if verbose:
-                    print("Found {} hearings".format(hearing_elements.count()))
+                    logger.info("Found {} hearings".format(hearing_elements.count()))
                 # Iterate over individual hearings
                 for j in range(hearing_elements.count()):
                     # Extract current hearing details
@@ -101,10 +103,10 @@ def scrape_committee_hearing(
                             current_location = current_loc
                             current_room = ""
                     except:
-                        print(
+                        logger.warning(
                             f"No time or location details could be extracted for {current_name} on {current_date}"
                         )
-                        print(current_details)
+                        logger.info(current_details)
                         continue
 
                     # Extract hearing notes if available
@@ -150,7 +152,7 @@ def scrape_committee_hearing(
                     # Extract all HTML elements with the measure identifier
                     measure_selector = soup.select("span.measureLink")
                     if verbose:
-                        print("Found {} measures".format(len(measure_selector)))
+                        logger.info("Found {} measures".format(len(measure_selector)))
 
                     # Generate a tuple with hearing date, name, chamber_id=2 for every measure element
                     current_events = utils.collect_measure_info(
@@ -173,13 +175,13 @@ def scrape_committee_hearing(
                     close_button.click()
 
         browser.close()
-        print("Closed Senate browser")
+        logger.info("Closed Senate browser")
 
         # Concatenate the results into a set
         return hearings_normalized, bills_natural_key
 
     except Exception as e:
-        print(f"[SEN] Daily File scrape failed: {e}")
+        logger.error(f"[SEN] Daily File scrape failed: {e}")
         return None
     finally:
         if page:

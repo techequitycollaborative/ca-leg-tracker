@@ -22,7 +22,9 @@ of bills into a utils function, which returns a set of tuples in the shape (DATE
 
 from bs4 import BeautifulSoup as bs
 import utils.scraping as utils
+import logging
 
+logger = logging.getLogger(__name__)
 
 # TODO: refactor with Python classes for readability
 def scrape_committee_hearing(
@@ -50,13 +52,13 @@ def scrape_committee_hearing(
         # Navigate to committee hearings tab
         page.wait_for_selector("div.details-wrapper-committee-hearing")
         if verbose:
-            print("Found committee hearings tab")
+            logger.info("Found committee hearings tab")
 
         # Get pointers to each table row corresponding to a hearing
         hearing_rows = page.locator("tr.committee-hearing-details")
         hearing_count = hearing_rows.count()
         if verbose:
-            print(f"Found {hearing_count} hearings")
+            logger.info(f"Found {hearing_count} hearings")
 
         # for each hearing
         for i in range(hearing_count):
@@ -94,12 +96,12 @@ def scrape_committee_hearing(
 
             if "View Agenda" not in row_menu_contents:
                 if verbose:
-                    print(f"No agenda found for {details["name"]}")
+                    logger.info(f"No agenda found for {details["name"]}")
                 # Close the dropdown menu by clicking the button again
                 hearing_menu.click()
                 page.wait_for_timeout(500)
             else:  # Check for bills on the hearing agenda
-                print("Clicking current hearing agenda")
+                logger.info("Clicking current hearing agenda")
                 agenda_link = current_hearing.locator(
                     'a[href*="/api/dailyfile/agenda"]'
                 )
@@ -125,7 +127,7 @@ def scrape_committee_hearing(
                 # Extract measures
                 measure_selector = soup.select("span.measureLink")
                 if verbose:
-                    print("Found {} measures".format(len(measure_selector)))
+                    logger.info("Found {} measures".format(len(measure_selector)))
 
                 hearing_bills = utils.collect_measure_info(
                     details["date"], details["name"], measure_selector, 1
@@ -165,7 +167,7 @@ def scrape_committee_hearing(
             )
 
     except Exception as e:
-        print(f"[ASM] Daily File scrape failed: {e}")
+        logger.error(f"[ASM] Daily File scrape failed: {e}")
         return None
     finally:
         if page:

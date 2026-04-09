@@ -4,7 +4,9 @@ Slack notification utilities for pipeline alerts.
 
 import requests
 from config import config
+import logging
 
+logger = logging.getLogger(__name__)
 
 def send_slack_alert(message, channel=None, color="danger"):
     """
@@ -20,7 +22,7 @@ def send_slack_alert(message, channel=None, color="danger"):
         webhook_url = slack_config.get("webhook_url")
 
         if not webhook_url:
-            print("Slack webhook URL not configured, skipping alert")
+            logger.info("Slack webhook URL not configured, skipping alert")
             return False
 
         # Use configured channel or override
@@ -56,11 +58,11 @@ def send_slack_alert(message, channel=None, color="danger"):
 
         response = requests.post(webhook_url, json=payload)
         response.raise_for_status()
-        print(f"Slack alert sent successfully: {message[:100]}...")
+        logger.info(f"Slack alert sent successfully: {message[:100]}...")
         return True
 
     except Exception as e:
-        print(f"Failed to send Slack alert: {str(e)}")
+        logger.error(f"Failed to send Slack alert: {str(e)}")
         return False
 
 

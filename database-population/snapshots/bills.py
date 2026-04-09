@@ -7,6 +7,9 @@ from config import config
 from io import StringIO
 import csv
 from yaml import safe_load
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Index into credentials.ini for globals
 SNAPSHOT_SCHEMA = config("postgresql_schemas")["snapshot_schema"]
@@ -65,7 +68,7 @@ def fetch_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_page=
         data, num_pages = openstates.get_bill_data(
             page=current_page, updated_since=updated_since
         )
-        print(
+        logger.info(
             "Finished fetching page "
             + str(current_page)
             + " of "
@@ -161,8 +164,8 @@ def upsert_bill_data(cur, bills):
             abstract=EXCLUDED.abstract
     """
     cur.execute(update_bills_query.format(SNAPSHOT_SCHEMA, temp_table_name))
-    print("Snapshot upsert main bill table")
-    print(cur.statusmessage)
+    logger.info("Snapshot upsert main bill table")
+    logger.info(cur.statusmessage)
 
 
 def openstates_update_bill_data(
@@ -218,13 +221,13 @@ def openstates_update_bill_data(
         DELETE FROM {0}.{1}
         WHERE openstates_bill_id IN ({2})
     """
-    print("Delete old actions, sponsor, vote snapshots")
+    logger.info("Delete old actions, sponsor, vote snapshots")
     cur.execute(delete_query.format(SNAPSHOT_SCHEMA, bill_action, bill_ids_string))
-    print(cur.statusmessage)
+    logger.info(cur.statusmessage)
     cur.execute(delete_query.format(SNAPSHOT_SCHEMA, bill_sponsor, bill_ids_string))
-    print(cur.statusmessage)
+    logger.info(cur.statusmessage)
     cur.execute(delete_query.format(SNAPSHOT_SCHEMA, bill_vote, bill_ids_string))
-    print(cur.statusmessage)
+    logger.info(cur.statusmessage)
 
     # Copy new data to live tables
     update_data_query = """
@@ -232,19 +235,19 @@ def openstates_update_bill_data(
         SELECT *
         FROM {2}
     """
-    print("Update actions, sponsor, vote snapshots with new data")
+    logger.info("Update actions, sponsor, vote snapshots with new data")
     cur.execute(
         update_data_query.format(SNAPSHOT_SCHEMA, bill_action, bill_action + "_temp")
     )
-    print(cur.statusmessage)
+    logger.info(cur.statusmessage)
     cur.execute(
         update_data_query.format(SNAPSHOT_SCHEMA, bill_sponsor, bill_sponsor + "_temp")
     )
-    print(cur.statusmessage)
+    logger.info(cur.statusmessage)
     cur.execute(
         update_data_query.format(SNAPSHOT_SCHEMA, bill_vote, bill_vote + "_temp")
     )
-    print(cur.statusmessage)
+    logger.info(cur.statusmessage)
 
 
 def upsert(cur, response):

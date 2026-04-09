@@ -11,7 +11,9 @@ from tenacity import (
     wait_exponential,
     retry_if_exception_type,
 )
+import logging
 
+logger = logging.getLogger(__name__)
 # Global constants
 
 ENDPOINTS = {"bills": "https://v3.openstates.org/bills"}
@@ -66,7 +68,7 @@ def process_bill_json(data, last_update):
             if abstract["note"] == "summary":
                 current_abstract = abstract["abstract"]
             else:
-                print(
+                logger.info(
                     "found abstract of type "
                     + abstract["note"]
                     + " for bill "
@@ -98,7 +100,7 @@ def process_bill_json(data, last_update):
                 sponsor.append(next_sponsor["classification"])
                 bill_sponsors.append(sponsor)
             else:
-                print(
+                logger.info(
                     "found sponsor of type "
                     + sponsor["entity_type"]
                     + " for bill "
