@@ -1,5 +1,5 @@
-"""
-"""
+""" """
+
 import sources.schedule_asm_fetch as assembly
 import sources.schedule_sen_fetch as senate
 from config import config
@@ -18,7 +18,9 @@ def fetch_updates():
     assembly_hearings, assembly_bills = assembly.scrape_committee_hearing(verbose=True)
     senate_hearings, senate_bills = senate.scrape_committee_hearing(verbose=True)
 
-    print(f"[ASM] {len(assembly_hearings)} hearings; {len(assembly_bills)} bills retrieved")
+    print(
+        f"[ASM] {len(assembly_hearings)} hearings; {len(assembly_bills)} bills retrieved"
+    )
     print(f"[SEN] {len(senate_hearings)} hearings; {len(senate_bills)} bills retrieved")
 
     # join sets before returning
@@ -68,7 +70,6 @@ def update_hearing_committee_ids(cur):
     cur.execute(update_query.format(SNAPSHOT_SCHEMA, HEARINGS_TABLE))
     print("Updated committee IDs where name match found")
     print(cur.statusmessage)
-
 
 
 def update_joint_hearing_chamber_id(cur):
@@ -135,13 +136,15 @@ def insert_hearing_bills(cur):
         SELECT hearing_id, openstates_bill_id, file_order
         FROM resolved;
     """
-    cur.execute(insert_query.format(
-        STAGE_HEARING_BILLS_TABLE,
-        SNAPSHOT_SCHEMA,
-        HEARINGS_TABLE,
-        CURRENT_SESSION,
-        HEARING_BILLS_TABLE
-    ))
+    cur.execute(
+        insert_query.format(
+            STAGE_HEARING_BILLS_TABLE,
+            SNAPSHOT_SCHEMA,
+            HEARINGS_TABLE,
+            CURRENT_SESSION,
+            HEARING_BILLS_TABLE,
+        )
+    )
     print("Inserted hearing bills")
     print(cur.statusmessage)
 
@@ -166,15 +169,16 @@ def log_dropped_hearing_bills(cur):
             AND b.session = '{3}'
         );
     """
-    cur.execute(log_query.format(
-        STAGE_HEARING_BILLS_TABLE,
-        SNAPSHOT_SCHEMA,
-        HEARINGS_TABLE,
-        CURRENT_SESSION
-    ))
+    cur.execute(
+        log_query.format(
+            STAGE_HEARING_BILLS_TABLE, SNAPSHOT_SCHEMA, HEARINGS_TABLE, CURRENT_SESSION
+        )
+    )
     dropped = cur.fetchall()
     if dropped:
-        print(f"WARNING: {len(dropped)} hearing bill rows could not be matched and were dropped:")
+        print(
+            f"WARNING: {len(dropped)} hearing bill rows could not be matched and were dropped:"
+        )
         for row in dropped:
             print(f"  bill={row[0]}, hearing={row[1]}, date={row[2]}, chamber={row[3]}")
     else:
@@ -189,7 +193,10 @@ def drop_stage_hearing_bills(cur):
 DEADLINE_LEAD_DAYS = 7
 DEADLINE_TYPE = "letter"
 
-def insert_hearing_deadlines(cur, lead_days=DEADLINE_LEAD_DAYS, deadline_type=DEADLINE_TYPE):
+
+def insert_hearing_deadlines(
+    cur, lead_days=DEADLINE_LEAD_DAYS, deadline_type=DEADLINE_TYPE
+):
     insert_query = """
         INSERT INTO {0}.hearing_deadlines (hearing_id, deadline_date, deadline_type)
         SELECT
@@ -211,8 +218,9 @@ def hearing_bills_update(cur, hearing_bills_data):
     drop_stage_hearing_bills(cur)
     return
 
+
 def update(cur, hearings_data, hearing_bills_data):
-    truncate_hearings(cur) # cascades to hearing_bills automatically
+    truncate_hearings(cur)  # cascades to hearing_bills automatically
     insert_hearings(cur, hearings_data)
     update_hearing_committee_ids(cur)
     update_joint_hearing_chamber_id(cur)

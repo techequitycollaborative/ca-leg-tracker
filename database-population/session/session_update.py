@@ -18,7 +18,6 @@ from session.snapshots.people import (
 from session.snapshots.contacts import fetch_codex_updates, codex_upsert_contacts
 
 
-
 def run_session_update(force_update=False):
     conn = None
     try:
@@ -72,7 +71,9 @@ def run_session_update(force_update=False):
             )
 
             for chamber, contact_data in contact_updates.items():
-                codex_upsert_contacts(cur=cur, contact_data=contact_data, chamber=chamber)
+                codex_upsert_contacts(
+                    cur=cur, contact_data=contact_data, chamber=chamber
+                )
 
             print("Legislator snapshot updated")
 

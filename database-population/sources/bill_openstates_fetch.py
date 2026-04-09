@@ -1,10 +1,16 @@
 """
 Parameters and functions that directly fetch from Openstates via GET requests.
 """
+
 from config import config
 from time import sleep
 import requests
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
 
 # Global constants
 
@@ -145,9 +151,11 @@ def process_bill_json(data, last_update):
 
 
 @retry(
-    retry=retry_if_exception_type((requests.exceptions.RequestException, ValueError, KeyError)),
+    retry=retry_if_exception_type(
+        (requests.exceptions.RequestException, ValueError, KeyError)
+    ),
     wait=wait_exponential(multiplier=1, min=10, max=60),
-    stop=stop_after_attempt(3)
+    stop=stop_after_attempt(3),
 )
 def fetch_bill_batch(page, updated_since):
     """

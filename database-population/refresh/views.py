@@ -1,5 +1,5 @@
-"""
-"""
+""" """
+
 from config import config
 import time
 
@@ -13,6 +13,7 @@ MATERIALIZED_VIEWS = [
     "committees_mv",
     "calendar_mv",
 ]
+
 
 def refresh(cur):
     for view in MATERIALIZED_VIEWS:

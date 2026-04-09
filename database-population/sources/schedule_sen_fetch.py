@@ -10,29 +10,32 @@ by simulating user page navigation.
 
 Once the HTML content is manipulated into the desired state, the contents are parsed by BeautifulSoup so we can extract
 elements marked as Daily File section items. For the committee hearings, we use the committee hearing agenda title as an
-event description, extract the specified date from the preceding h5 element, and a list of bills within this hearing 
+event description, extract the specified date from the preceding h5 element, and a list of bills within this hearing
 subsection.
 
-For each individual hearing, the event date, event text/description, and the list of bills are passed into a utils 
+For each individual hearing, the event date, event text/description, and the list of bills are passed into a utils
 function, which returns a set of tuples in the shape (DATE, EVENT_TEXT, BILL_NUMBER).
 """
 
 from bs4 import BeautifulSoup as bs
 import utils.scraping as utils
 
+
 # TODO: refactor with Python classes for readability
-def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", verbose=False):
+def scrape_committee_hearing(
+    source_url="https://www.senate.ca.gov/calendar", verbose=False
+):
     # Generate start and end dates for a query on the Senate calendar
     start_date, end_date, query_url = utils.get_start_end_query(source_url)
     if verbose:
         print("Querying for Senate events from {} to {}".format(start_date, end_date))
         print(query_url)
-    
+
     # Calendar v2.0
     hearings_normalized = set()
     bills_natural_key = set()
 
-     # Try connecting to page
+    # Try connecting to page
     try:
         browser, page, handler = utils.make_page(query_url)
         # iterate over date wrapper blocks
@@ -73,54 +76,56 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
                 for j in range(hearing_elements.count()):
                     # Extract current hearing details
                     current_hearing = hearing_elements.nth(j)
-                    current_name = (
-                        utils.get_hearing_detail(
-                            current_hearing,
-                            "div.hearing-name",
-                            "title"
-                        )
+                    current_name = utils.get_hearing_detail(
+                        current_hearing, "div.hearing-name", "title"
                     )
                     # Extract details like time, location, room
                     try:
                         current_details = utils.get_hearing_detail(
                             current_hearing,
                             "div.attribute.page-events__time-location",
-                            False
+                            False,
                         )
-                        current_time_verbatim, current_loc = current_details.split(" - ")
-                        current_time_verbatim = current_time_verbatim.replace("Time: ", "")
-                        current_time, is_allday = utils.normalize_hearing_time(current_time_verbatim)
+                        current_time_verbatim, current_loc = current_details.split(
+                            " - "
+                        )
+                        current_time_verbatim = current_time_verbatim.replace(
+                            "Time: ", ""
+                        )
+                        current_time, is_allday = utils.normalize_hearing_time(
+                            current_time_verbatim
+                        )
                         if current_loc.count(",") == 1 and "Room" in current_loc:
                             current_location, current_room = current_loc.split(", ")
                         else:
                             current_location = current_loc
                             current_room = ""
                     except:
-                        print(f"No time or location details could be extracted for {current_name} on {current_date}")
+                        print(
+                            f"No time or location details could be extracted for {current_name} on {current_date}"
+                        )
                         print(current_details)
                         continue
 
                     # Extract hearing notes if available
-                    current_note = (
-                        utils.get_hearing_detail(
-                            current_hearing,
-                            "div.attribute.note",
-                            "lower"
-                        )
+                    current_note = utils.get_hearing_detail(
+                        current_hearing, "div.attribute.note", "lower"
                     )
 
                     # add to hearings_normalized — one row per unique hearing
-                    hearings_normalized.add((
-                        2,  # chamber_id
-                        current_name,
-                        current_date,
-                        current_time_verbatim,
-                        current_time,
-                        is_allday,
-                        current_location,
-                        current_room,
-                        current_note
-                    ))
+                    hearings_normalized.add(
+                        (
+                            2,  # chamber_id
+                            current_name,
+                            current_date,
+                            current_time_verbatim,
+                            current_time,
+                            is_allday,
+                            current_location,
+                            current_room,
+                            current_note,
+                        )
+                    )
 
                     # Extract every bill on the agenda
                     current_agenda = current_hearing.get_by_role(
@@ -130,14 +135,16 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
 
                     # Extract HTML and parse as BeautifulSoup object
                     # Wait for the modal to be visible
-                    page.wait_for_selector("div.agenda-container", state="visible", timeout=5000)
+                    page.wait_for_selector(
+                        "div.agenda-container", state="visible", timeout=5000
+                    )
 
                     # Get the HTML content of the modal
                     modal_html = page.locator("div.agenda-container").inner_html()
 
                     # Parse with BeautifulSoup
                     soup = bs(modal_html, "html.parser")
-                    
+
                     # with open(f"SEN_agenda-{i}.html", "w", encoding="utf-8") as f:
                     #     f.write(soup.prettify())
                     # Extract all HTML elements with the measure identifier
@@ -152,13 +159,14 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
 
                     # Expand the tuples with all details
                     current_events_detailed = utils.add_measure_details(
-                        current_time_verbatim, current_location, current_room, current_events
+                        current_time_verbatim,
+                        current_location,
+                        current_room,
+                        current_events,
                     )
 
                     # Update results with set intersection operation on a set of collected bills/measures
-                    bills_natural_key = (
-                        bills_natural_key | current_events_detailed
-                    )
+                    bills_natural_key = bills_natural_key | current_events_detailed
 
                     # Close agenda pop-up
                     close_button = page.get_by_role("button", name="Close").first
@@ -166,7 +174,7 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
 
         browser.close()
         print("Closed Senate browser")
-        
+
         # Concatenate the results into a set
         return hearings_normalized, bills_natural_key
 
@@ -180,7 +188,7 @@ def scrape_committee_hearing(source_url="https://www.senate.ca.gov/calendar", ve
             browser.close()
         if handler:
             handler.stop()
-    
+
 
 def main():
     hearings, bills = scrape_committee_hearing(verbose=True)
@@ -192,6 +200,7 @@ def main():
     print("Detected bills scheduled for hearing:")
     for row in sorted(bills, key=lambda x: (x[2], x[4])):
         print(row)
+
 
 if __name__ == "__main__":
     main()

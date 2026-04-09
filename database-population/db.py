@@ -4,13 +4,14 @@ Provides a context manager for psycopg2 cursor lifecycle and
 a retry wrapper for unreliable external API calls.
 
 NOTE: connection logic is duplicated in session/session_update.py
-Consolidate into common DB module references when integrating full stack 
+Consolidate into common DB module references when integrating full stack
 services.
 """
 
 from contextlib import contextmanager
 import psycopg2
 from config import config
+
 # import time
 # import logging
 

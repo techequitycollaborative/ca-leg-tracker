@@ -12,17 +12,18 @@ from time import sleep
 import re
 
 USERAGENTS = [
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36',
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/109.0.0.0 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36",
 ]
 
 detail_fns = {
     "strip": lambda x: x.strip(),
     "title": lambda x: x.strip().title(),
-    "lower": lambda x: x.strip().lower()
+    "lower": lambda x: x.strip().lower(),
 }
+
 
 def get_start_end_query(source_url):
     start_date = datetime.date.today()
@@ -38,7 +39,8 @@ def get_start_end_query(source_url):
     return start_date, end_date, query_url
 
 
-ALLDAY_PATTERNS = re.compile(r'prior|upon|adjournment|call of the chair', re.IGNORECASE)
+ALLDAY_PATTERNS = re.compile(r"prior|upon|adjournment|call of the chair", re.IGNORECASE)
+
 
 def normalize_hearing_time(time_str):
     """
@@ -49,19 +51,25 @@ def normalize_hearing_time(time_str):
         return None, True
 
     normalized = time_str.strip().lower()
-    normalized = re.sub(r'\bto\b.*$', '', normalized).strip()  # drop end time if present
-    normalized = re.sub(r'a\.m\.', 'AM', normalized, flags=re.IGNORECASE)
-    normalized = re.sub(r'p\.m\.', 'PM', normalized, flags=re.IGNORECASE)
+    normalized = re.sub(
+        r"\bto\b.*$", "", normalized
+    ).strip()  # drop end time if present
+    normalized = re.sub(r"a\.m\.", "AM", normalized, flags=re.IGNORECASE)
+    normalized = re.sub(r"p\.m\.", "PM", normalized, flags=re.IGNORECASE)
 
-    for fmt in ('%I:%M %p', '%I %p'):
+    for fmt in ("%I:%M %p", "%I %p"):
         try:
-            return datetime.datetime.strptime(normalized, fmt).strftime('%H:%M:%S'), False
+            return (
+                datetime.datetime.strptime(normalized, fmt).strftime("%H:%M:%S"),
+                False,
+            )
         except ValueError:
             continue
 
     # If parsing fails, preserve as all-day and log
     print(f"WARNING: could not parse time string '{time_str}', treating as all-day")
     return None, True
+
 
 def text_to_date_string(s):
     """
@@ -73,20 +81,18 @@ def text_to_date_string(s):
     try:
         dt = parser.parse(s)
         return dt.strftime("%Y-%m-%d")
-    except ValueError: 
+    except ValueError:
         print(f"WARNING: could not parse date string {s}")
         return None
 
-def get_hearing_detail(
-        hearing: Locator, 
-        selector: str,
-        transform="strip"
-        ):
+
+def get_hearing_detail(hearing: Locator, selector: str, transform="strip"):
     result = hearing.locator(selector).inner_text().replace("\n", " ")
     if transform:
         return detail_fns[transform](result)
     else:
         return result
+
 
 def prettify_structure(content):
     """
@@ -180,8 +186,8 @@ def make_page(url, max_retries=3, timeout=50000, headless=True):
                 context = browser.new_context(
                     user_agent=user_agent,
                     viewport={"width": 1280, "height": 720},
-                    locale="en-US"
-                    )
+                    locale="en-US",
+                )
                 page = context.new_page()
                 assert page.evaluate("navigator.userAgent") == user_agent
                 page.set_default_timeout(timeout)
@@ -193,34 +199,36 @@ def make_page(url, max_retries=3, timeout=50000, headless=True):
 
                 # Attempt navigation
                 response = page.goto(
-                    url,
-                    wait_until="domcontentloaded",
-                    referer="https://www.google.com"
+                    url, wait_until="domcontentloaded", referer="https://www.google.com"
                 )
                 # Log error if not successful
                 if not response.ok:
                     raise Exception(f"HTTP {response.status}")
-                
+
                 # Log success and return
                 print(f"Success with user agent: {user_agent[:50]}...")
                 return browser, page, handler
-                
+
             except TimeoutError:
-                print(f"Attempt {attempt + 1}/{max_retries} failed with UA: {user_agent[:50]}...")
+                print(
+                    f"Attempt {attempt + 1}/{max_retries} failed with UA: {user_agent[:50]}..."
+                )
                 if browser:
                     browser.close()
                 if attempt == max_retries - 1:
                     print(f"Max retries reached for this UA, trying next...")
                 continue
             except Exception as e:
-                print(f"Attempt {attempt} failed ({user_agent[:30]}...): {str(e)[:100]}")
+                print(
+                    f"Attempt {attempt} failed ({user_agent[:30]}...): {str(e)[:100]}"
+                )
                 if browser:
                     browser.close()
                 if handler:
                     handler.stop()
                 if attempt == max_retries:
                     print(f"Exhausted retries for agent: {user_agent[:30]}...")
-    
+
     raise Exception("All user agents failed")
 
 
