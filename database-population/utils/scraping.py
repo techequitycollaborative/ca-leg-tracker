@@ -158,7 +158,7 @@ def page_click(clickable, force=False):
         return e
 
 
-def make_page(url, max_retries=3, timeout=50000, headless=True):
+def make_page(url, max_retries=3, timeout=30000, headless=True):
     """
     Args:
         url: target webpage
@@ -181,7 +181,15 @@ def make_page(url, max_retries=3, timeout=50000, headless=True):
                 # Initialize Playwright handler
                 # with sync_playwright() as p:
                 handler = sync_playwright().start()
-                browser = handler.chromium.launch(headless=headless)
+                browser = handler.chromium.launch(
+                    headless=headless,
+                    args=[
+                        "--no-sandbox",
+                        "--disable-setuid-sandbox",
+                        "--disable-dev-shm-usage",  # /dev/shm is often too small in Docker
+                        "--disable-gpu",
+                    ]
+                )
                 # User agent, viewport, locale to avoid detection
                 context = browser.new_context(
                     user_agent=user_agent,
@@ -191,6 +199,7 @@ def make_page(url, max_retries=3, timeout=50000, headless=True):
                 page = context.new_page()
                 assert page.evaluate("navigator.userAgent") == user_agent
                 page.set_default_timeout(timeout)
+                page.set_default_navigation_timeout(60000)  # for page.goto()
 
                 # Randomized delay
                 delay = random.uniform(0.5, 3)
