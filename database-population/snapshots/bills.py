@@ -1,6 +1,7 @@
-"""
-"""
+""" """
+
 import sources.bill_openstates_fetch as openstates
+import db
 import pandas as pd
 from config import config
 from io import StringIO
@@ -16,28 +17,31 @@ BILL_ACTION_COLUMNS = REQUEST_CONFIG["BILL_ACTION_COLUMNS"]
 BILL_SPONSOR_COLUMNS = REQUEST_CONFIG["BILL_SPONSOR_COLUMNS"]
 BILL_VOTE_COLUMNS = REQUEST_CONFIG["BILL_VOTE_COLUMNS"]
 
+
 def get_buffer(df):
     buffer = StringIO()
     df.to_csv(buffer, index=False, header=False, sep="\t", quoting=csv.QUOTE_NONE)
     buffer.seek(0)
     return buffer
 
-def get_last_update_timestamp(cur):
+
+def get_last_update_timestamp():
     """
-    Input: psycopg2 cursor
     Output: timestamp string
 
     Retrieves a timestamp of the most recently updated bill, or default value
     """
     query = "SELECT MAX(updated_at) FROM {0}.bill"
 
-    cur.execute(query.format(SNAPSHOT_SCHEMA))
-    last_updated = cur.fetchone()[0]
+    with db.get_cursor() as cur:
+        cur.execute(query.format(SNAPSHOT_SCHEMA))
+        last_updated = cur.fetchone()[0]
 
-    if last_updated == "" or last_updated == None:
+    if last_updated == "" or last_updated is None:
         last_updated = LAST_UPDATED_DEFAULT
 
     return last_updated
+
 
 def fetch_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_page=1):
     """
@@ -101,6 +105,7 @@ def fetch_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_page=
         "bill_sponsors": df_bill_sponsors,
         "bill_votes": df_bill_votes,
     }
+
 
 def upsert_bill_data(cur, bills):
     """
@@ -241,13 +246,14 @@ def openstates_update_bill_data(
     )
     print(cur.statusmessage)
 
+
 def upsert(cur, response):
     upsert_bill_data(cur, response["bills"])
     openstates_update_bill_data(
-        cur, 
+        cur,
         response["bills"]["openstates_bill_id"],
         response["bill_actions"],
         response["bill_sponsors"],
-        response["bill_votes"]
-        )
+        response["bill_votes"],
+    )
     return
