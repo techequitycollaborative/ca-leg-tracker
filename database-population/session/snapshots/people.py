@@ -1,5 +1,5 @@
-"""
-"""
+""" """
+
 from config import config
 import pandas as pd
 from io import StringIO
@@ -18,6 +18,7 @@ ROLE_COLUMNS = ["openstates_people_id", "org_classification", "district"]
 OFFICE_COLUMNS = ["openstates_people_id", "name", "phone", "address", "classification"]
 NAME_COLUMNS = ["openstates_people_id", "alt_name"]
 SOURCE_COLUMNS = ["openstates_people_id", "source_url"]
+
 
 def get_buffer(df):
     buffer = StringIO()
@@ -46,19 +47,17 @@ def get_last_update_timestamp(cur):
 
 def update_df(df, new_data, table_columns):
     df = pd.concat(
-            [
-                df,
-                pd.DataFrame(data=new_data, columns=table_columns),
-            ],
-            ignore_index=True,
-        )
+        [
+            df,
+            pd.DataFrame(data=new_data, columns=table_columns),
+        ],
+        ignore_index=True,
+    )
     return df
 
+
 def fetch_chamber_update(
-        chamber_name,
-        updated_since=LAST_UPDATED_DEFAULT,
-        max_page=1000,
-        start_page=1
+    chamber_name, updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_page=1
 ):
     df_people = pd.DataFrame(columns=PEOPLE_COLUMNS)
     df_people_roles = pd.DataFrame(columns=ROLE_COLUMNS)
@@ -70,60 +69,68 @@ def fetch_chamber_update(
     num_pages = start_page
 
     while current_page < num_pages and current_page < max_page:
-        current_page += 1 # increment
+        current_page += 1  # increment
         if chamber_name == "assembly":
             chamber_data, num_pages = people.get_assembly_data(
-                page=current_page, 
-                updated_since=updated_since
+                page=current_page, updated_since=updated_since
             )
             print(
                 f"Finished fetching page {current_page} of {num_pages} of assembly updates"
             )
         else:
             chamber_data, num_pages = people.get_senate_data(
-                page=current_page, 
-                updated_since=updated_since
+                page=current_page, updated_since=updated_since
             )
             print(
                 f"Finished fetching page {current_page} of {num_pages} of senate updates"
             )
-        
+
         # Update dataframes
-        df_people = update_df(df_people, chamber_data["people"], table_columns=PEOPLE_COLUMNS)
-        df_people_roles = update_df(df_people_roles, chamber_data["people_roles"], table_columns=ROLE_COLUMNS)
-        df_people_offices = update_df(df_people_offices, chamber_data["people_offices"], table_columns=OFFICE_COLUMNS)
-        df_people_names = update_df(df_people_names, chamber_data["people_names"], table_columns=NAME_COLUMNS)
-        df_people_sources = update_df(df_people_sources, chamber_data["people_sources"], table_columns=SOURCE_COLUMNS)
-    
+        df_people = update_df(
+            df_people, chamber_data["people"], table_columns=PEOPLE_COLUMNS
+        )
+        df_people_roles = update_df(
+            df_people_roles, chamber_data["people_roles"], table_columns=ROLE_COLUMNS
+        )
+        df_people_offices = update_df(
+            df_people_offices,
+            chamber_data["people_offices"],
+            table_columns=OFFICE_COLUMNS,
+        )
+        df_people_names = update_df(
+            df_people_names, chamber_data["people_names"], table_columns=NAME_COLUMNS
+        )
+        df_people_sources = update_df(
+            df_people_sources,
+            chamber_data["people_sources"],
+            table_columns=SOURCE_COLUMNS,
+        )
+
     return {
-        "people": df_people, 
+        "people": df_people,
         "people_roles": df_people_roles,
         "people_offices": df_people_offices,
         "people_names": df_people_names,
-        "people_sources": df_people_sources
-        }
+        "people_sources": df_people_sources,
+    }
+
 
 def fetch_legislator_updates(updated_since=LAST_UPDATED_DEFAULT):
     # Get each chamber's updates
-    assembly_update = fetch_chamber_update(
-        "assembly", 
-        updated_since=updated_since
-        )
-    
-    senate_update = fetch_chamber_update(
-        "senate",
-        updated_since=updated_since
-    )
-    
+    assembly_update = fetch_chamber_update("assembly", updated_since=updated_since)
+
+    senate_update = fetch_chamber_update("senate", updated_since=updated_since)
+
     # Concat together the updates
     results = {}
     for k in assembly_update.keys():
         curr = pd.concat([assembly_update[k], senate_update[k]])
         assert type(curr) == pd.DataFrame
         results[k] = curr
-    
+
     # Final results
     return results
+
 
 def upsert_people(cur, people):
     temp_table_name = "people_temp"
@@ -155,14 +162,13 @@ def upsert_people(cur, people):
     cur.execute(update_people_query.format(SNAPSHOT_SCHEMA, temp_table_name))
     return
 
+
 def load_from_buffer(cur, df, table_name, table_columns):
     cur.copy_from(
-        file=get_buffer(df),
-        table=table_name + "_temp",
-        sep="\t",
-        columns=table_columns
+        file=get_buffer(df), table=table_name + "_temp", sep="\t", columns=table_columns
     )
     return
+
 
 def flush_table(cur, table_name, people_id_string):
     delete_query = """
@@ -174,6 +180,7 @@ def flush_table(cur, table_name, people_id_string):
     print(cur.statusmessage)
     return
 
+
 def insert_from_temp(cur, table_name, table_columns):
     update_data_query = """
         INSERT INTO {0}.{1} ({2})
@@ -182,24 +189,22 @@ def insert_from_temp(cur, table_name, table_columns):
     """
     cur.execute(
         update_data_query.format(
-            SNAPSHOT_SCHEMA, 
-            table_name,
-            ", ".join(table_columns), 
-            table_name + "_temp"
+            SNAPSHOT_SCHEMA, table_name, ", ".join(table_columns), table_name + "_temp"
         )
     )
     print(cur.statusmessage)
     return
 
+
 def update_people_data(
-        cur, 
-        people_list=[], 
-        people_role_data=[],
-        people_office_data=[],
-        people_name_data=[],
-        people_source_data=[]
-        ):
-    
+    cur,
+    people_list=[],
+    people_role_data=[],
+    people_office_data=[],
+    people_name_data=[],
+    people_source_data=[],
+):
+
     # Temp table names
     people_roles = "people_roles"
     people_offices = "people_offices"
@@ -245,6 +250,7 @@ def update_people_data(
     insert_from_temp(cur, people_names, NAME_COLUMNS)
     insert_from_temp(cur, people_sources, SOURCE_COLUMNS)
     return
+
 
 # NOTE: committee fetch via OpenStates API is currently unsupported and unlikely to be re-enabled.
 # Kept for reference only. Committee data is managed manually in snapshot.committee.

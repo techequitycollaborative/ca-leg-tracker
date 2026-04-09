@@ -4,17 +4,17 @@ Provides a context manager for psycopg2 cursor lifecycle and
 a retry wrapper for unreliable external API calls.
 
 NOTE: connection logic is duplicated in session/session_update.py
-Consolidate into common DB module references when integrating full stack 
+Consolidate into common DB module references when integrating full stack
 services.
 """
 
 from contextlib import contextmanager
 import psycopg2
 from config import config
-# import time
-# import logging
 
-# logger = logging.getLogger(__name__)
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 @contextmanager
@@ -26,22 +26,18 @@ def get_cursor():
         cur = conn.cursor()
         yield cur
         conn.commit()
-        # logger.info("Transaction committed")
-        print("Transaction committed")
+        logger.info("Transaction committed")
     except psycopg2.DatabaseError as e:
         if conn:
             conn.rollback()
-            # logger.error(f"Transaction rolled back: {e.pgerror}")
-            print(f"Transaction rolled back: {e.pgerror}")
+            logger.error(f"Transaction rolled back: {e.pgerror}")
         raise
     except Exception as e:
         if conn:
             conn.rollback()
-            # logger.error(f"Transaction rolled back: {str(e)}")
-            print(f"Transaction rolled back: {str(e)}")
+            logger.error(f"Transaction rolled back: {str(e)}")
         raise
     finally:
         if conn:
             conn.close()
-            # logger.info("Database connection closed")
-            print("Database connection closed")
+            logger.info("Database connection closed")

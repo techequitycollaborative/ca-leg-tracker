@@ -3,6 +3,7 @@ Parameters and functions that directly fetch from Openstates via GET requests.
 
 Called in session_update.py
 """
+
 from config import config
 from time import sleep
 import requests
@@ -15,7 +16,7 @@ ENDPOINTS = {
     "committees": "https://v3.openstates.org/committees",
 }
 WAIT_TIME = 10  # openstates has a rate limit of 6 requests/minute
-BASE_PARAMS = { # people schema does not use session param
+BASE_PARAMS = {  # people schema does not use session param
     "jurisdiction": "California",
     "sort": "updated_asc",  # only usable option, unfortunately this could lead to skipped rows if updates happen during sync
     "per_page": 20,  # max allowed by openstates
@@ -36,11 +37,11 @@ def process_legislator_json(data, last_update):
     Input: JSON data, update timestamp
     Output: dictionary of strings mapped to nested lists
     """
-    people = [] # core person data
-    people_roles = [] # correpsonding role and metadata
-    people_offices = [] # corresponding office metadata
-    people_names = [] # corresponding alternate names
-    people_sources = [] # corresponding primary sources
+    people = []  # core person data
+    people_roles = []  # correpsonding role and metadata
+    people_offices = []  # corresponding office metadata
+    people_names = []  # corresponding alternate names
+    people_sources = []  # corresponding primary sources
 
     for next_person in data:
         if next_person["updated_at"] == last_update:
@@ -64,7 +65,7 @@ def process_legislator_json(data, last_update):
         people_roles.append(role)
 
         # process office data
-        for next_office in next_person["offices"]: 
+        for next_office in next_person["offices"]:
             office = []
             # Openstates people ID
             office.append(next_person["id"])
@@ -88,7 +89,7 @@ def process_legislator_json(data, last_update):
             name.append(next_name["name"])
             # Update list
             people_names.append(name)
-        
+
         for next_source in next_person["sources"]:
             source = []
             # Openstates people ID
@@ -99,11 +100,11 @@ def process_legislator_json(data, last_update):
             people_sources.append(source)
 
     return {
-        "people": people, 
+        "people": people,
         "people_roles": people_roles,
         "people_offices": people_offices,
         "people_names": people_names,
-        "people_sources": people_sources
+        "people_sources": people_sources,
     }
 
 

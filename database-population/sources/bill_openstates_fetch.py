@@ -1,11 +1,19 @@
 """
 Parameters and functions that directly fetch from Openstates via GET requests.
 """
+
 from config import config
 from time import sleep
 import requests
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from tenacity import (
+    retry,
+    stop_after_attempt,
+    wait_exponential,
+    retry_if_exception_type,
+)
+import logging
 
+logger = logging.getLogger(__name__)
 # Global constants
 
 ENDPOINTS = {"bills": "https://v3.openstates.org/bills"}
@@ -60,7 +68,7 @@ def process_bill_json(data, last_update):
             if abstract["note"] == "summary":
                 current_abstract = abstract["abstract"]
             else:
-                print(
+                logger.info(
                     "found abstract of type "
                     + abstract["note"]
                     + " for bill "
@@ -92,7 +100,7 @@ def process_bill_json(data, last_update):
                 sponsor.append(next_sponsor["classification"])
                 bill_sponsors.append(sponsor)
             else:
-                print(
+                logger.info(
                     "found sponsor of type "
                     + sponsor["entity_type"]
                     + " for bill "
@@ -145,9 +153,11 @@ def process_bill_json(data, last_update):
 
 
 @retry(
-    retry=retry_if_exception_type((requests.exceptions.RequestException, ValueError, KeyError)),
+    retry=retry_if_exception_type(
+        (requests.exceptions.RequestException, ValueError, KeyError)
+    ),
     wait=wait_exponential(multiplier=1, min=10, max=60),
-    stop=stop_after_attempt(3)
+    stop=stop_after_attempt(3),
 )
 def fetch_bill_batch(page, updated_since):
     """

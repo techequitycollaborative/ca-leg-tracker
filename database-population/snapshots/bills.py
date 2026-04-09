@@ -1,11 +1,15 @@
-"""
-"""
+""" """
+
 import sources.bill_openstates_fetch as openstates
+import db
 import pandas as pd
 from config import config
 from io import StringIO
 import csv
 from yaml import safe_load
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Index into credentials.ini for globals
 SNAPSHOT_SCHEMA = config("postgresql_schemas")["snapshot_schema"]
@@ -16,28 +20,31 @@ BILL_ACTION_COLUMNS = REQUEST_CONFIG["BILL_ACTION_COLUMNS"]
 BILL_SPONSOR_COLUMNS = REQUEST_CONFIG["BILL_SPONSOR_COLUMNS"]
 BILL_VOTE_COLUMNS = REQUEST_CONFIG["BILL_VOTE_COLUMNS"]
 
+
 def get_buffer(df):
     buffer = StringIO()
     df.to_csv(buffer, index=False, header=False, sep="\t", quoting=csv.QUOTE_NONE)
     buffer.seek(0)
     return buffer
 
-def get_last_update_timestamp(cur):
+
+def get_last_update_timestamp():
     """
-    Input: psycopg2 cursor
     Output: timestamp string
 
     Retrieves a timestamp of the most recently updated bill, or default value
     """
     query = "SELECT MAX(updated_at) FROM {0}.bill"
 
-    cur.execute(query.format(SNAPSHOT_SCHEMA))
-    last_updated = cur.fetchone()[0]
+    with db.get_cursor() as cur:
+        cur.execute(query.format(SNAPSHOT_SCHEMA))
+        last_updated = cur.fetchone()[0]
 
-    if last_updated == "" or last_updated == None:
+    if last_updated == "" or last_updated is None:
         last_updated = LAST_UPDATED_DEFAULT
 
     return last_updated
+
 
 def fetch_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_page=1):
     """
@@ -61,7 +68,7 @@ def fetch_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_page=
         data, num_pages = openstates.get_bill_data(
             page=current_page, updated_since=updated_since
         )
-        print(
+        logger.info(
             "Finished fetching page "
             + str(current_page)
             + " of "
@@ -101,6 +108,7 @@ def fetch_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_page=
         "bill_sponsors": df_bill_sponsors,
         "bill_votes": df_bill_votes,
     }
+
 
 def upsert_bill_data(cur, bills):
     """
@@ -156,8 +164,8 @@ def upsert_bill_data(cur, bills):
             abstract=EXCLUDED.abstract
     """
     cur.execute(update_bills_query.format(SNAPSHOT_SCHEMA, temp_table_name))
-    print("Snapshot upsert main bill table")
-    print(cur.statusmessage)
+    logger.info("Snapshot upsert main bill table")
+    logger.info(cur.statusmessage)
 
 
 def openstates_update_bill_data(
@@ -213,13 +221,13 @@ def openstates_update_bill_data(
         DELETE FROM {0}.{1}
         WHERE openstates_bill_id IN ({2})
     """
-    print("Delete old actions, sponsor, vote snapshots")
+    logger.info("Delete old actions, sponsor, vote snapshots")
     cur.execute(delete_query.format(SNAPSHOT_SCHEMA, bill_action, bill_ids_string))
-    print(cur.statusmessage)
+    logger.info(cur.statusmessage)
     cur.execute(delete_query.format(SNAPSHOT_SCHEMA, bill_sponsor, bill_ids_string))
-    print(cur.statusmessage)
+    logger.info(cur.statusmessage)
     cur.execute(delete_query.format(SNAPSHOT_SCHEMA, bill_vote, bill_ids_string))
-    print(cur.statusmessage)
+    logger.info(cur.statusmessage)
 
     # Copy new data to live tables
     update_data_query = """
@@ -227,27 +235,28 @@ def openstates_update_bill_data(
         SELECT *
         FROM {2}
     """
-    print("Update actions, sponsor, vote snapshots with new data")
+    logger.info("Update actions, sponsor, vote snapshots with new data")
     cur.execute(
         update_data_query.format(SNAPSHOT_SCHEMA, bill_action, bill_action + "_temp")
     )
-    print(cur.statusmessage)
+    logger.info(cur.statusmessage)
     cur.execute(
         update_data_query.format(SNAPSHOT_SCHEMA, bill_sponsor, bill_sponsor + "_temp")
     )
-    print(cur.statusmessage)
+    logger.info(cur.statusmessage)
     cur.execute(
         update_data_query.format(SNAPSHOT_SCHEMA, bill_vote, bill_vote + "_temp")
     )
-    print(cur.statusmessage)
+    logger.info(cur.statusmessage)
+
 
 def upsert(cur, response):
     upsert_bill_data(cur, response["bills"])
     openstates_update_bill_data(
-        cur, 
+        cur,
         response["bills"]["openstates_bill_id"],
         response["bill_actions"],
         response["bill_sponsors"],
-        response["bill_votes"]
-        )
+        response["bill_votes"],
+    )
     return

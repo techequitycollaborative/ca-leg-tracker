@@ -1,11 +1,12 @@
-"""
-"""
+""" """
+
 import sources.schedule_asm_fetch as assembly
 import sources.schedule_sen_fetch as senate
 from config import config
 from tqdm import tqdm
+import logging
 
-
+logger = logging.getLogger(__name__)
 # Index into credentials.ini for globals
 SNAPSHOT_SCHEMA = config("postgresql_schemas")["snapshot_schema"]
 CURRENT_SESSION = config("resources")["session"]
@@ -18,8 +19,10 @@ def fetch_updates():
     assembly_hearings, assembly_bills = assembly.scrape_committee_hearing(verbose=True)
     senate_hearings, senate_bills = senate.scrape_committee_hearing(verbose=True)
 
-    print(f"[ASM] {len(assembly_hearings)} hearings; {len(assembly_bills)} bills retrieved")
-    print(f"[SEN] {len(senate_hearings)} hearings; {len(senate_bills)} bills retrieved")
+    logger.info(
+        f"[ASM] {len(assembly_hearings)} hearings; {len(assembly_bills)} bills retrieved"
+    )
+    logger.info(f"[SEN] {len(senate_hearings)} hearings; {len(senate_bills)} bills retrieved")
 
     # join sets before returning
     final_hearings = assembly_hearings | senate_hearings
@@ -31,8 +34,8 @@ def fetch_updates():
 def truncate_hearings(cur):
     truncate_query = "TRUNCATE TABLE {0}.{1} RESTART IDENTITY CASCADE"
     cur.execute(truncate_query.format(SNAPSHOT_SCHEMA, HEARINGS_TABLE))
-    print("Truncated hearings table")
-    print(cur.statusmessage)
+    logger.info("Truncated hearings table")
+    logger.info(cur.statusmessage)
 
 
 def insert_hearings(cur, hearings_data):
@@ -52,8 +55,8 @@ def insert_hearings(cur, hearings_data):
     """
     for row in tqdm(hearings_data):
         cur.execute(insert_query.format(SNAPSHOT_SCHEMA, HEARINGS_TABLE), tuple(row))
-    print(f"Inserted {len(hearings_data)} hearings")
-    print(cur.statusmessage)
+    logger.info(f"Inserted {len(hearings_data)} hearings")
+    logger.info(cur.statusmessage)
 
 
 def update_hearing_committee_ids(cur):
@@ -66,9 +69,8 @@ def update_hearing_committee_ids(cur):
         AND h.committee_id IS NULL
     """
     cur.execute(update_query.format(SNAPSHOT_SCHEMA, HEARINGS_TABLE))
-    print("Updated committee IDs where name match found")
-    print(cur.statusmessage)
-
+    logger.info("Updated committee IDs where name match found")
+    logger.info(cur.statusmessage)
 
 
 def update_joint_hearing_chamber_id(cur):
@@ -84,8 +86,8 @@ def update_joint_hearing_chamber_id(cur):
         WHERE LOWER(name) LIKE '%joint%'
     """
     cur.execute(update_query.format(SNAPSHOT_SCHEMA, HEARINGS_TABLE))
-    print("Updated joint hearing chamber IDs")
-    print(cur.statusmessage)
+    logger.info("Updated joint hearing chamber IDs")
+    logger.info(cur.statusmessage)
 
 
 def stage_hearing_bills(cur, hearing_bills_data):
@@ -109,7 +111,7 @@ def stage_hearing_bills(cur, hearing_bills_data):
     """
     for row in tqdm(hearing_bills_data):
         cur.execute(insert_query.format(STAGE_HEARING_BILLS_TABLE), tuple(row))
-    print(f"Staged {len(hearing_bills_data)} hearing bill rows")
+    logger.info(f"Staged {len(hearing_bills_data)} hearing bill rows")
 
 
 def insert_hearing_bills(cur):
@@ -135,15 +137,17 @@ def insert_hearing_bills(cur):
         SELECT hearing_id, openstates_bill_id, file_order
         FROM resolved;
     """
-    cur.execute(insert_query.format(
-        STAGE_HEARING_BILLS_TABLE,
-        SNAPSHOT_SCHEMA,
-        HEARINGS_TABLE,
-        CURRENT_SESSION,
-        HEARING_BILLS_TABLE
-    ))
-    print("Inserted hearing bills")
-    print(cur.statusmessage)
+    cur.execute(
+        insert_query.format(
+            STAGE_HEARING_BILLS_TABLE,
+            SNAPSHOT_SCHEMA,
+            HEARINGS_TABLE,
+            CURRENT_SESSION,
+            HEARING_BILLS_TABLE,
+        )
+    )
+    logger.info("Inserted hearing bills")
+    logger.info(cur.statusmessage)
 
 
 def log_dropped_hearing_bills(cur):
@@ -166,30 +170,34 @@ def log_dropped_hearing_bills(cur):
             AND b.session = '{3}'
         );
     """
-    cur.execute(log_query.format(
-        STAGE_HEARING_BILLS_TABLE,
-        SNAPSHOT_SCHEMA,
-        HEARINGS_TABLE,
-        CURRENT_SESSION
-    ))
+    cur.execute(
+        log_query.format(
+            STAGE_HEARING_BILLS_TABLE, SNAPSHOT_SCHEMA, HEARINGS_TABLE, CURRENT_SESSION
+        )
+    )
     dropped = cur.fetchall()
     if dropped:
-        print(f"WARNING: {len(dropped)} hearing bill rows could not be matched and were dropped:")
+        logger.warning(
+            f"{len(dropped)} hearing bill rows could not be matched and were dropped:"
+        )
         for row in dropped:
-            print(f"  bill={row[0]}, hearing={row[1]}, date={row[2]}, chamber={row[3]}")
+            logger.info(f"  bill={row[0]}, hearing={row[1]}, date={row[2]}, chamber={row[3]}")
     else:
-        print("All hearing bill rows matched successfully")
+        logger.info("All hearing bill rows matched successfully")
 
 
 def drop_stage_hearing_bills(cur):
     cur.execute(f"DROP TABLE IF EXISTS {STAGE_HEARING_BILLS_TABLE}")
-    print(cur.statusmessage)
+    logger.info(cur.statusmessage)
 
 
 DEADLINE_LEAD_DAYS = 7
 DEADLINE_TYPE = "letter"
 
-def insert_hearing_deadlines(cur, lead_days=DEADLINE_LEAD_DAYS, deadline_type=DEADLINE_TYPE):
+
+def insert_hearing_deadlines(
+    cur, lead_days=DEADLINE_LEAD_DAYS, deadline_type=DEADLINE_TYPE
+):
     insert_query = """
         INSERT INTO {0}.hearing_deadlines (hearing_id, deadline_date, deadline_type)
         SELECT
@@ -200,8 +208,8 @@ def insert_hearing_deadlines(cur, lead_days=DEADLINE_LEAD_DAYS, deadline_type=DE
         ON CONFLICT ON CONSTRAINT unique_deadline DO NOTHING;
     """
     cur.execute(insert_query.format(SNAPSHOT_SCHEMA, lead_days), (deadline_type,))
-    print(f"Inserted hearing deadlines ({lead_days} day lead, type='{deadline_type}')")
-    print(cur.statusmessage)
+    logger.info(f"Inserted hearing deadlines ({lead_days} day lead, type='{deadline_type}')")
+    logger.info(cur.statusmessage)
 
 
 def hearing_bills_update(cur, hearing_bills_data):
@@ -211,8 +219,9 @@ def hearing_bills_update(cur, hearing_bills_data):
     drop_stage_hearing_bills(cur)
     return
 
+
 def update(cur, hearings_data, hearing_bills_data):
-    truncate_hearings(cur) # cascades to hearing_bills automatically
+    truncate_hearings(cur)  # cascades to hearing_bills automatically
     insert_hearings(cur, hearings_data)
     update_hearing_committee_ids(cur)
     update_joint_hearing_chamber_id(cur)
