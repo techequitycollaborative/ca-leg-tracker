@@ -19,7 +19,16 @@ log = logging.getLogger(__name__)
 def run_pipeline(force_update=False):
     start_time = time.time()
     current_step = "initializing"
-    stats = {"bills_updated": 0, "hearings_updated": 0, "runtime_seconds": 0}
+
+    # Initialize dictionary in case any errors are raised
+    stats = {
+        "bills_updated": 0, 
+        "hearings_updated": 0, 
+        "fetch_runtime_seconds": 0,
+        "db_write_runtime_seconds": 0,
+        "db_view_runtime_seconds": 0,
+        "db_runtime_seconds": 0
+        }
     try:
         timestamp = dt.datetime.now(dt.timezone.utc)
         log.info(
@@ -41,7 +50,13 @@ def run_pipeline(force_update=False):
             f"Hearing fetch complete | hearings={len(hearing_schedule)}, bill_schedule_rows={len(bill_schedule)}"
         )
 
-        log.info("Opening DB transaction...")
+        # Record total data fetch time
+        stats["fetch_runtime_seconds"] = time.time() - start_time
+
+        # --- Phase 2: Write (first DB connection) ---
+        # Reset timer for DB transaction
+        db_start = time.time()
+        log.info("Opening DB transaction (writes)...")
         with db.get_cursor() as cur:
             current_step = "bills write"
             if n_bills > 0 or force_update:
@@ -63,15 +78,30 @@ def run_pipeline(force_update=False):
                 stats["hearings_updated"] = len(hearing_schedule)
             else:
                 log.info("No hearing updates to write, skipping")
-
+        
+        stats["db_write_runtime_seconds"] = time.time() - db_start
+        
+        # --- Phase 3: Refresh (second DB connection) ---
+        view_start = time.time()
+        log.info("Opening DB transaction (writes)...")
+        with db.get_cursor() as cur:
             current_step = "views refresh"
             log.info("Refreshing materialized views...")
             views.refresh(cur)
             log.info("Views refreshed")
-
-        stats["runtime_seconds"] = time.time() - start_time
+        
+        stats["db_view_runtime_seconds"] = time.time() - view_start
+        stats["db_runtime_seconds"] = stats["db_write_runtime_seconds"] + stats["db_view_runtime_seconds"]
+        
+        # --- Phase 4: Log ---
         log.info(
-            f"Pipeline complete | bills={stats['bills_updated']} hearings={stats['hearings_updated']} runtime={stats['runtime_seconds']:2f}s"
+            (
+                "Pipeline complete | "
+                f"bills={stats['bills_updated']} "
+                f"hearings={stats['hearings_updated']} "
+                f"fetch_runtime={stats['fetch_runtime_seconds']:2f}s "
+                f"db_runtime={stats['db_runtime_seconds']:2f}s"
+            )
         )
         send_pipeline_success_alert(stats)
 
