@@ -27,7 +27,7 @@ def run_pipeline(force_update=False):
         "fetch_runtime_seconds": 0,
         "db_write_runtime_seconds": 0,
         "db_view_runtime_seconds": 0,
-        "db_runtime_seconds": 0
+        "total_runtime_seconds": 0
         }
     try:
         timestamp = dt.datetime.now(dt.timezone.utc)
@@ -91,16 +91,20 @@ def run_pipeline(force_update=False):
             log.info("Views refreshed")
         
         stats["db_view_runtime_seconds"] = time.time() - view_start
-        stats["db_runtime_seconds"] = stats["db_write_runtime_seconds"] + stats["db_view_runtime_seconds"]
-        
+
         # --- Phase 4: Log ---
+        # Store total runtime top to bottom
+        stats["runtime_seconds"] = time.time() - start_time
+
         log.info(
             (
                 "Pipeline complete | "
                 f"bills={stats['bills_updated']} "
                 f"hearings={stats['hearings_updated']} "
                 f"fetch_runtime={stats['fetch_runtime_seconds']:2f}s "
-                f"db_runtime={stats['db_runtime_seconds']:2f}s"
+                f"db_write_runtime={stats['db_write_runtime_seconds']:2f}s "
+                f"db_view_runtime={stats['db_view_runtime_seconds']:2f}s "
+                f"total_runtime={stats['runtime_seconds']:2f}s"
             )
         )
         send_pipeline_success_alert(stats)
