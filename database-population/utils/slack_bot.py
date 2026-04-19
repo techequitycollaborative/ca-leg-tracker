@@ -78,7 +78,10 @@ def send_pipeline_success_alert(stats):
 • Bills updated: {stats.get('bills_updated', 0)}
 • Hearings updated: {stats.get('hearings_updated', 0)}
 • Topics updated: {stats.get('topics_updated', 0)}
-• Total runtime: {stats.get('runtime_seconds', 0):.2f} seconds
+• Runtime (data fetch): {stats.get('fetch_runtime_seconds', 0):.2f} seconds
+• Runtime (DB write): {stats.get('db_write_runtime_seconds', 0):.2f} seconds
+• Runtime (DB refresh): {stats.get('db_view_runtime_seconds', 0):.2f} seconds
+• Runtime (TOTAL): {stats.get('runtime_seconds', 0):.2f} seconds
     """
 
     send_slack_alert(message, color="good")
