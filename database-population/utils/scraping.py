@@ -117,7 +117,7 @@ def normalize_bill_number(text):
     Input: bill number string from agenda, presumably X.B. No. 123
     Output: "XB 123"
     """
-    return text.replace("No.", "").replace(".", "").strip()
+    return text.replace("\n", "").replace("No.", "").replace(".", "")
 
 
 def collect_measure_info(event_date, event_description, sel, chamber_id):
