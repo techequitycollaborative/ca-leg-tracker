@@ -22,7 +22,7 @@ import utils.scraping as utils
 import logging
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+
 # TODO: refactor with Python classes for readability
 def scrape_committee_hearing(
     source_url="https://www.senate.ca.gov/calendar", verbose=False
@@ -156,7 +156,7 @@ def scrape_committee_hearing(
 
                     if hearing_key not in hearing_cache:
                         hearing_cache[hearing_key] = {
-                            'chamber_id': 2,
+                            'chamber_id': utils.transform_chamber_id(2, current_name),
                             'name': current_name,
                             'date': current_date,
                             'time_verbatim': current_time_verbatim,
@@ -170,7 +170,7 @@ def scrape_committee_hearing(
                         }
                     elif j > hearing_cache[hearing_key]['index']:
                         hearing_cache[hearing_key] = {
-                            'chamber_id': 2,
+                            'chamber_id': utils.transform_chamber_id(2, current_name),
                             'name': current_name,
                             'date': current_date,
                             'time_verbatim': current_time_verbatim,

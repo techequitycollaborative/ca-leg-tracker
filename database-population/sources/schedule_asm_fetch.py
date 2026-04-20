@@ -158,7 +158,7 @@ def scrape_committee_hearing(
             
             if hearing_key not in hearing_cache:
                 hearing_cache[hearing_key] = {
-                    'chamber_id': 1,
+                    'chamber_id': utils.transform_chamber_id(1, details['name']),
                     'name': details["name"],
                     'date': details["date"],
                     'time_verbatim': details["time_verbatim"],
@@ -172,7 +172,7 @@ def scrape_committee_hearing(
                 }
             elif i > hearing_cache[hearing_key]['index']:
                 hearing_cache[hearing_key] = {
-                    'chamber_id': 1,
+                    'chamber_id': utils.transform_chamber_id(1, details['name']),
                     'name': details["name"],
                     'date': details["date"],
                     'time_verbatim': details["time_verbatim"],
