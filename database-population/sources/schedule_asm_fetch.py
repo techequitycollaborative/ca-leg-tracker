@@ -33,7 +33,7 @@ def scrape_committee_hearing(
 ):
 
     # Initialize
-    hearing_cache = {}  # key: (date, name) -> {'index': int, 'bills': set}
+    hearing_cache = {}  # key: (date, name) -> {'index': int, 'bills': set, ...}
 
     # Try connecting to page
     try:
@@ -198,41 +198,41 @@ def scrape_committee_hearing(
         if handler:
             handler.stop()
         
-        # Build final results from cache
-        hearings_normalized = set()
-        bills_natural_key = set()
+    # Build final results from cache
+    hearings_normalized = set()
+    bills_natural_key = set()
 
-        for cached in hearing_cache.values():
-            hearings_normalized.add(
+    for cached in hearing_cache.values():
+        hearings_normalized.add(
+            (
+                cached['chamber_id'],
+                cached['name'],
+                cached['date'],
+                cached['time_verbatim'],
+                cached['time_normalized'],
+                cached['is_allday'],
+                cached['location'],
+                cached['room'],
+                cached['notes']
+            )
+        )
+
+        for file_order, bill in enumerate(cached['bills']):
+            # Manually reorder attributes to minimize refactor
+            bills_natural_key.add(
                 (
                     cached['chamber_id'],
-                    cached['name'],
                     cached['date'],
+                    cached['name'],
+                    bill,
+                    file_order,
                     cached['time_verbatim'],
-                    cached['time_normalized'],
-                    cached['is_allday'],
                     cached['location'],
-                    cached['room'],
-                    cached['notes']
+                    cached['room']
                 )
             )
-
-            for file_order, bill in enumerate(cached['bills']):
-                # Manually reorder attributes to minimize refactor
-                bills_natural_key.add(
-                    (
-                        cached['chamber_id'],
-                        cached['date'],
-                        cached['name'],
-                        bill,
-                        file_order,
-                        cached['time_verbatim'],
-                        cached['location'],
-                        cached['room']
-                    )
-                )
-        # Concatenate the results into a set
-        return hearings_normalized, bills_natural_key
+    # Concatenate the results into a set
+    return hearings_normalized, bills_natural_key
 
 
 def main():

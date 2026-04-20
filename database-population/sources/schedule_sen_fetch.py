@@ -22,7 +22,7 @@ import utils.scraping as utils
 import logging
 
 logger = logging.getLogger(__name__)
-
+logging.basicConfig(level=logging.INFO)
 # TODO: refactor with Python classes for readability
 def scrape_committee_hearing(
     source_url="https://www.senate.ca.gov/calendar", verbose=False
@@ -34,8 +34,7 @@ def scrape_committee_hearing(
         logger.info(query_url)
 
     # Calendar v2.0
-    hearings_normalized = set()
-    bills_natural_key = set()
+    hearing_cache = {}  # key: (date, name) -> {'index': int, 'bills': set, ...}
 
     # Try connecting to page
     try:
@@ -114,19 +113,13 @@ def scrape_committee_hearing(
                         current_hearing, "div.attribute.note", "lower"
                     )
 
-                    # add to hearings_normalized — one row per unique hearing
-                    hearings_normalized.add(
-                        (
-                            2,  # chamber_id
-                            current_name,
-                            current_date,
-                            current_time_verbatim,
-                            current_time,
-                            is_allday,
-                            current_location,
-                            current_room,
-                            current_note,
-                        )
+                    # Update hearing cache
+                    hearing_key = (
+                        current_date,
+                        current_name,
+                        current_time_verbatim,
+                        current_location,
+                        current_room
                     )
 
                     # Extract every bill on the agenda
@@ -154,21 +147,43 @@ def scrape_committee_hearing(
                     if verbose:
                         logger.info("Found {} measures".format(len(measure_selector)))
 
-                    # Generate a tuple with hearing date, name, chamber_id=2 for every measure element
-                    current_events = utils.collect_measure_info(
-                        current_date, current_name, measure_selector, 2
-                    )
+                    current_bills = []
+                    if measure_selector is not None and len(measure_selector):
+                        current_bills = [
+                            utils.normalize_bill_number(m.text)
+                            for m in measure_selector
+                        ]
 
-                    # Expand the tuples with all details
-                    current_events_detailed = utils.add_measure_details(
-                        current_time_verbatim,
-                        current_location,
-                        current_room,
-                        current_events,
-                    )
-
-                    # Update results with set intersection operation on a set of collected bills/measures
-                    bills_natural_key = bills_natural_key | current_events_detailed
+                    if hearing_key not in hearing_cache:
+                        hearing_cache[hearing_key] = {
+                            'chamber_id': 2,
+                            'name': current_name,
+                            'date': current_date,
+                            'time_verbatim': current_time_verbatim,
+                            'time_normalized': current_time,
+                            'is_allday': is_allday,
+                            'location': current_location,
+                            'room': current_room,
+                            'notes': current_note,
+                            'bills': current_bills,
+                            'index': j
+                        }
+                    elif j > hearing_cache[hearing_key]['index']:
+                        hearing_cache[hearing_key] = {
+                            'chamber_id': 2,
+                            'name': current_name,
+                            'date': current_date,
+                            'time_verbatim': current_time_verbatim,
+                            'time_normalized': current_time,
+                            'is_allday': is_allday,
+                            'location': current_location,
+                            'room': current_room,
+                            'notes': current_note,
+                            'bills': current_bills,
+                            'index': j
+                        }
+                        if verbose:
+                            logger.info(f"Replaced duplicate hearing: {hearing_key}")
 
                     # Close agenda pop-up
                     close_button = page.get_by_role("button", name="Close").first
@@ -176,9 +191,6 @@ def scrape_committee_hearing(
 
         browser.close()
         logger.info("Closed Senate browser")
-
-        # Concatenate the results into a set
-        return hearings_normalized, bills_natural_key
 
     except Exception as e:
         logger.error(f"[SEN] Daily File scrape failed: {e}")
@@ -191,6 +203,41 @@ def scrape_committee_hearing(
         if handler:
             handler.stop()
 
+    # Build final results from cache
+    hearings_normalized = set()
+    bills_natural_key = set()
+
+    for cached in hearing_cache.values():
+        hearings_normalized.add(
+            (
+                cached['chamber_id'],
+                cached['name'],
+                cached['date'],
+                cached['time_verbatim'],
+                cached['time_normalized'],
+                cached['is_allday'],
+                cached['location'],
+                cached['room'],
+                cached['notes']
+            )
+        )
+
+        for file_order, bill in enumerate(cached['bills']):
+            # Manually reorder attributes to minimize refactor
+            bills_natural_key.add(
+                (
+                    cached['chamber_id'],
+                    cached['date'],
+                    cached['name'],
+                    bill,
+                    file_order,
+                    cached['time_verbatim'],
+                    cached['location'],
+                    cached['room']
+                )
+            )
+    # Concatenate the results into a set
+    return hearings_normalized, bills_natural_key
 
 def main():
     hearings, bills = scrape_committee_hearing(verbose=True)
