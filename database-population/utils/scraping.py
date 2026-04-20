@@ -112,6 +112,20 @@ def prettify_structure(content):
     return
 
 
+def transform_chamber_id(chamber_id, name):
+    name_lower = name.lower()
+    if 'joint legislative audit' in name_lower or (
+        'assembly' in name_lower and 'senate' in name_lower
+    ):
+        return 5
+    elif 'joint' in name_lower and chamber_id == 1:
+        return 3
+    elif 'joint' in name_lower and chamber_id == 2:
+        return 4
+    else:
+        return chamber_id
+    
+    
 def normalize_bill_number(text):
     """
     Input: bill number string from agenda, presumably X.B. No. 123
