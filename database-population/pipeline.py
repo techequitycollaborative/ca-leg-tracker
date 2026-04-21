@@ -22,13 +22,13 @@ def run_pipeline(force_update=False):
 
     # Initialize dictionary in case any errors are raised
     stats = {
-        "bills_updated": 0, 
-        "hearings_updated": 0, 
+        "bills_updated": 0,
+        "hearings_updated": 0,
         "fetch_runtime_seconds": 0,
         "db_write_runtime_seconds": 0,
         "db_view_runtime_seconds": 0,
-        "total_runtime_seconds": 0
-        }
+        "total_runtime_seconds": 0,
+    }
     try:
         timestamp = dt.datetime.now(dt.timezone.utc)
         log.info(
@@ -78,9 +78,9 @@ def run_pipeline(force_update=False):
                 stats["hearings_updated"] = len(hearing_schedule)
             else:
                 log.info("No hearing updates to write, skipping")
-        
+
         stats["db_write_runtime_seconds"] = time.time() - db_start
-        
+
         # --- Phase 3: Refresh (second DB connection) ---
         view_start = time.time()
         log.info("Opening DB transaction (writes)...")
@@ -89,7 +89,7 @@ def run_pipeline(force_update=False):
             log.info("Refreshing materialized views...")
             views.refresh(cur)
             log.info("Views refreshed")
-        
+
         stats["db_view_runtime_seconds"] = time.time() - view_start
 
         # --- Phase 4: Log ---
