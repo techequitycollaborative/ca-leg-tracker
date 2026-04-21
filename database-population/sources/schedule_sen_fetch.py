@@ -108,12 +108,6 @@ def scrape_committee_hearing(
                         logger.info(current_details)
                         continue
 
-                    # Extract hearing notes if available
-                    current_note = utils.get_hearing_detail(
-                        current_hearing, "div.attribute.note", "lower"
-                    )
-
-                    # Update hearing cache
                     hearing_key = (
                         current_date,
                         current_name,
@@ -140,20 +134,40 @@ def scrape_committee_hearing(
                     # Parse with BeautifulSoup
                     soup = bs(modal_html, "html.parser")
 
-                    # with open(f"SEN_agenda-{i}.html", "w", encoding="utf-8") as f:
-                    #     f.write(soup.prettify())
+                                        # Extract hearing notes if available
+                    # use HearingTopic for general notes with "; " separator
+                    current_note = ""
+                    topics = soup.select("span.HearingTopic")
+                    logger.debug(topics)
+                    current_note = "; ".join(
+                        [
+                            t.text.lower().strip()
+                            for t in topics
+                            if "_" not in t.text
+                        ]
+                    )
+                    logger.debug(f"Note extracted: {current_note}")
+
+                    # extract FootNote span if it exists
+                    has_footnotes = soup.select_one("span.MeasureFootNotes")
+                    symbol_to_footnote = None
+                    if has_footnotes:
+                        symbol_to_footnote = utils.extract_footnote_symbol(has_footnotes)
+                        logger.info(
+                            f"Footnote to symbol map:\n{symbol_to_footnote}"
+                        )
                     # Extract all HTML elements with the measure identifier
-                    measure_selector = soup.select("span.measureLink")
+                    measure_selector = soup.select("span.Measure")
                     if verbose:
                         logger.info("Found {} measures".format(len(measure_selector)))
 
-                    current_bills = []
-                    if measure_selector is not None and len(measure_selector):
-                        current_bills = [
-                            utils.normalize_bill_number(m.text)
-                            for m in measure_selector
-                        ]
+                    current_bills = utils.collect_measure_order_footnotes(
+                        measure_selector,
+                        footnote_map=symbol_to_footnote
+                    )
 
+                    if has_footnotes:
+                        logger.debug(current_bills)
                     if hearing_key not in hearing_cache:
                         hearing_cache[hearing_key] = {
                             'chamber_id': utils.transform_chamber_id(2, current_name),
@@ -222,24 +236,29 @@ def scrape_committee_hearing(
             )
         )
 
-        for file_order, bill in enumerate(cached['bills']):
+        for bill in cached['bills']:
+            bill_name = f"{bill["type"]} {bill["number"]}"
+
             # Manually reorder attributes to minimize refactor
             bills_natural_key.add(
                 (
                     cached['chamber_id'],
                     cached['date'],
                     cached['name'],
-                    bill,
-                    file_order,
                     cached['time_verbatim'],
                     cached['location'],
-                    cached['room']
+                    cached['room'],
+                    bill_name,
+                    bill['file_order'],
+                    bill['footnote'],
+                    bill['note_symbol']
                 )
             )
     # Concatenate the results into a set
     return hearings_normalized, bills_natural_key
 
 def main():
+    logging.basicConfig(level=logging.DEBUG)
     hearings, bills = scrape_committee_hearing(verbose=True)
 
     print("Detected hearings:")

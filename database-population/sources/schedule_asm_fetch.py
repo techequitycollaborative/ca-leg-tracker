@@ -128,26 +128,39 @@ def scrape_committee_hearing(
 
                 # with open(f"ASM_agenda-{i}.html", "w", encoding="utf-8") as f:
                 #     f.write(soup.prettify())
-                # Extract hearing topic if available
-                hearing_topics = ""
+                # Extract hearing notes (usually ID'ed as topic) if available
+                hearing_notes = ""
                 topics = soup.select("span.HearingTopic")
-                hearing_notes = "".join(
+                hearing_notes = "; ".join(
                     [
-                        t.get_text().lower().strip()
+                        t.text.lower().strip()
                         for t in topics
+                        if "_" not in t.text
                     ]
                 )
+                # extract FootNote span if it exists
+                footnotes = soup.select_one("span.MeasureFootNotes")
+                footnote_map = None
+                if footnotes:
+                    footnote_map = utils.extract_footnote_symbol(footnotes)
 
                 # Extract measures
-                measure_selector = soup.select("span.measureLink")
+                measure_selector = soup.select("span.Measure")
                 if verbose:
                     logger.info("Found {} measures".format(len(measure_selector)))
 
-                hearing_bills = [
-                    utils.normalize_bill_number(m.text)
-                    for m in measure_selector
-                ]
+                hearing_bills = utils.collect_measure_order_footnotes(
+                        measure_selector,
+                        footnote_map=footnote_map
+                    )
 
+                if footnotes:
+                    logger.debug(f"Hearing: {details["name"]}")
+                    logger.debug(
+                        f"Symbol to Footnote:\n{footnote_map}"
+                    )
+                    logger.debug(bool(footnote_map))
+                    logger.debug(hearing_bills)
                 # Close agenda modal
                 page.keyboard.press("Escape")
                 page.wait_for_timeout(500)
@@ -217,18 +230,22 @@ def scrape_committee_hearing(
             )
         )
 
-        for file_order, bill in enumerate(cached['bills']):
+        for bill in cached['bills']:
+            bill_name = f"{bill["type"]} {bill["number"]}"
+
             # Manually reorder attributes to minimize refactor
             bills_natural_key.add(
                 (
                     cached['chamber_id'],
                     cached['date'],
                     cached['name'],
-                    bill,
-                    file_order,
                     cached['time_verbatim'],
                     cached['location'],
-                    cached['room']
+                    cached['room'],
+                    bill_name,
+                    bill['file_order'],
+                    bill['footnote'],
+                    bill['note_symbol']
                 )
             )
     # Concatenate the results into a set
@@ -236,6 +253,7 @@ def scrape_committee_hearing(
 
 
 def main():
+    logging.basicConfig(level=logging.DEBUG)
     hearings, bills = scrape_committee_hearing(verbose=True)
 
     print("Detected hearings:")
