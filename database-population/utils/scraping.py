@@ -112,38 +112,73 @@ def prettify_structure(content):
     return
 
 
+def transform_chamber_id(chamber_id, name):
+    name_lower = name.lower()
+    if 'joint legislative audit' in name_lower or (
+        'assembly' in name_lower and 'senate' in name_lower
+    ):
+        return 5
+    elif 'joint' in name_lower and chamber_id == 1:
+        return 3
+    elif 'joint' in name_lower and chamber_id == 2:
+        return 4
+    else:
+        return chamber_id
+    
+
+def extract_footnote_symbol(sel):
+    result = dict()
+
+    for span in sel.select("span.FootNote"):
+        symbol = span.select_one("span.NoteSymbol")
+        note = span.select_one("span.NoteText")
+        result[symbol.text] = note.text.replace("\n", " ")
+
+        logger.debug(f"Extracted footnote: {note.text}")
+        logger.debug(f"Extracted symbol: {symbol.text}")
+    return result
+
+
 def normalize_bill_number(text):
     """
     Input: bill number string from agenda, presumably X.B. No. 123
     Output: "XB 123"
     """
-    return text.replace("No.", "").replace(".", "").strip()
+    return text.replace("\n", "").replace("No.", "").replace(".", "")
 
 
-def collect_measure_info(event_date, event_description, sel, chamber_id):
-    """
-    Input: date string, event description, list of selected measure HTML elements, chamber ID
-    Output: set of tuples (CHAMBER_ID, EVENT_DATE, EVENT_TEXT, BILL_NUM)
-    """
-    results = set()
+def extract_measure_num_symbol(sel):
+    m_type = sel.select_one("span.MeasureType")
+    m_num = sel.select_one("span.MeasureNum")
+    m_symbol = sel.select_one("span.NoteSymbol")
+
+    if m_symbol and len(m_symbol):
+        logger.debug("Found symbol")
+        return {
+            "type": m_type.text.replace(".", ""),
+            "number": m_num.contents[-1].strip(),
+            "note_symbol": m_symbol.text
+        }
+    else:
+        return {
+            "type": m_type.text.replace(".", ""),
+            "number": m_num.contents[-1].strip(),
+            "note_symbol": None
+        }
+
+
+def collect_measure_order_footnotes(sel, footnote_map=None):
+    results = []
     for i, measure in enumerate(sel):
-        results.add(
-            (
-                chamber_id,
-                event_date,
-                event_description,
-                normalize_bill_number(measure.text),
-                i + 1,  # generate an agenda item rank based on webpage
-            )
-        )
-    return results
-
-
-def add_measure_details(event_time, event_location, event_room, measures):
-    results = set()
-
-    for m in measures:  # unpack existing attributes and add these new ones
-        results.add((*m, event_time, event_location, event_room))
+        measure_details = extract_measure_num_symbol(measure)
+        measure_details["file_order"] = i + 1
+        has_symbol = bool(measure_details["note_symbol"])
+        if footnote_map and has_symbol:
+            logger.debug("Matched symbol to footnote")
+            measure_details["footnote"] = footnote_map[measure_details["note_symbol"]]
+        else:
+            measure_details["footnote"] = None 
+        results.append(measure_details)
     return results
 
 
