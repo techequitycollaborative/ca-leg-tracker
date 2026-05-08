@@ -99,7 +99,7 @@ def upsert_hearings(cur):
             name, date, time_verbatim, time_normalized, is_allday, location, 
             room, notes
         FROM {stage}
-        ON CONFLICT (chamber_id, name, date) DO UPDATE SET
+        ON CONFLICT (chamber_id, name, date, time_verbatim) DO UPDATE SET
             time_verbatim   = EXCLUDED.time_verbatim,
             time_normalized = EXCLUDED.time_normalized,
             is_allday       = EXCLUDED.is_allday,
@@ -155,15 +155,18 @@ def cancel_missing_hearings(cur):
         SELECT h.hearing_id, h.name, h.date, h.chamber_id, s.notes
         FROM {schema}.{hearings} h
         LEFT JOIN {stage} s
-            ON s.chamber_id = h.chamber_id
-            AND s.name = h.name
+            ON s.chamber_id       = h.chamber_id
+            AND s.name            = h.name
+            AND s.date            = h.date
+            AND s.time_normalized IS NOT DISTINCT FROM h.time_normalized -- handles null matching
         WHERE h.canceled_at IS NULL
         AND h.date > CURRENT_DATE
         AND NOT EXISTS (
             SELECT 1 FROM {stage} incoming
             WHERE incoming.chamber_id = h.chamber_id
-            AND incoming.name = h.name
-            AND incoming.date = h.date
+            AND incoming.name         = h.name
+            AND incoming.date         = h.date
+            AND incoming.time_normalized IS NOT DISTINCT FROM h.time_normalized
         )
     """.format(
             schema=SNAPSHOT_SCHEMA, 
@@ -201,8 +204,9 @@ def cancel_missing_hearings(cur):
         AND NOT EXISTS (
             SELECT 1 FROM {stage} s
             WHERE s.chamber_id = h.chamber_id
-            AND s.name = h.name
-            AND s.date = h.date
+            AND s.name         = h.name
+            AND s.date         = h.date
+            AND s.time_normalized IS NOT DISTINCT FROM h.time_normalized
         )
     """.format(
             schema=SNAPSHOT_SCHEMA, 
