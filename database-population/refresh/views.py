@@ -13,7 +13,10 @@ MATERIALIZED_VIEWS = [
     "bills_mv",
     "bill_history_mv",
     "committees_mv",
-    "calendar_mv",
+    "hearings_mv",
+    "hearing_bills_mv",
+    "hearing_deadlines_mv",
+    "calendar_mv", #TODO: is this still in use?
 ]
 
 
