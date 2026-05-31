@@ -2,7 +2,7 @@
 Upserts source hearing-related data into the snapshot schema.
 
 1. Stage all incoming hearings in a temporary table
-2. Upserts hearings based on diff between DB and staged incoming hearings 
+2. Upserts hearings based on diff between DB and staged incoming hearings
 3. Soft-delete hearings that are present in the DB but absent from the incoming
    data so that child records (hearing_bills, hearing_deadlines) can be preserved
    for audit purposes. Past hearings are not touched. Also logs a per-hearing
@@ -15,6 +15,7 @@ Upserts source hearing-related data into the snapshot schema.
 9. Log dropped bills that could not be matched for diagnostics.
 10. Sync deadlines, recalculating stale ones for rescheduled hearings
 """
+
 import db
 import sources.schedule_asm_fetch as assembly
 import sources.schedule_sen_fetch as senate
@@ -32,16 +33,18 @@ HEARING_BILLS_TABLE = "hearing_bills"
 INCOMING_HEARINGS_TABLE = "incoming_" + HEARINGS_TABLE
 INCOMING_HEARING_BILLS_TABLE = "incoming_" + HEARING_BILLS_TABLE
 
-    
 
 def fetch_updates():
+    logger.info("Fetching hearing schedule...")
     assembly_hearings, assembly_bills = assembly.scrape_committee_hearing(verbose=True)
     senate_hearings, senate_bills = senate.scrape_committee_hearing(verbose=True)
 
     logger.info(
         f"[ASM] {len(assembly_hearings)} hearings; {len(assembly_bills)} bills retrieved"
     )
-    logger.info(f"[SEN] {len(senate_hearings)} hearings; {len(senate_bills)} bills retrieved")
+    logger.info(
+        f"[SEN] {len(senate_hearings)} hearings; {len(senate_bills)} bills retrieved"
+    )
 
     # join sets before returning
     final_hearings = assembly_hearings | senate_hearings
@@ -51,7 +54,6 @@ def fetch_updates():
 
 
 def stage_incoming_hearings(cur, hearings_data):
-    
 
     create_query = """
         CREATE TEMPORARY TABLE {stage} (
@@ -75,7 +77,7 @@ def stage_incoming_hearings(cur, hearings_data):
         )
         VALUES (%s, %s, %s::DATE, %s, %s::TIME, %s, %s, %s, %s)
     """.format(stage=INCOMING_HEARINGS_TABLE)
-    
+
     cur.executemany(insert_query, hearings_data)
 
     logger.info(f"Staged incoming hearings: {cur.rowcount} rows affected")
@@ -118,11 +120,9 @@ def upsert_hearings(cur):
             ELSE {schema}.{hearings}.canceled_at
         END
     """.format(
-            schema=SNAPSHOT_SCHEMA,
-            hearings=HEARINGS_TABLE,
-            stage=INCOMING_HEARINGS_TABLE
-        )
-    
+        schema=SNAPSHOT_SCHEMA, hearings=HEARINGS_TABLE, stage=INCOMING_HEARINGS_TABLE
+    )
+
     cur.execute(upsert_query)
     logger.info(f"Upserted hearings: {cur.rowcount} affected")
     return
@@ -134,6 +134,7 @@ _NOTE_CANCELED = "hearing canceled"
 _NOTE_MOVED = "hearing moved to"
 _NOTE_ROOM = "note room change"
 _NOTE_TIME = "note time change"
+
 
 def _classify_cancellation_reason(notes: str | None) -> str:
     if not notes:
@@ -160,7 +161,14 @@ def cancel_missing_hearings(cur):
             AND s.date            = h.date
             AND s.time_normalized IS NOT DISTINCT FROM h.time_normalized -- handles null matching
         WHERE h.canceled_at IS NULL
-        AND h.date > CURRENT_DATE
+        AND (
+            h.date > CURRENT_DATE OR 
+            (
+                h.date = CURRENT_DATE AND 
+                h.time_normalized > CURRENT_TIME AND
+                NOT h.is_allday
+                )
+            )
         AND NOT EXISTS (
             SELECT 1 FROM {stage} incoming
             WHERE incoming.chamber_id = h.chamber_id
@@ -169,19 +177,17 @@ def cancel_missing_hearings(cur):
             AND incoming.time_normalized IS NOT DISTINCT FROM h.time_normalized
         )
     """.format(
-            schema=SNAPSHOT_SCHEMA, 
-            hearings=HEARINGS_TABLE, 
-            stage=INCOMING_HEARINGS_TABLE
-            )
-    
+        schema=SNAPSHOT_SCHEMA, hearings=HEARINGS_TABLE, stage=INCOMING_HEARINGS_TABLE
+    )
+
     cur.execute(fetch_query)
-    
+
     to_cancel = cur.fetchall()
 
     if not to_cancel:
         logger.info("No hearings to cancel")
         return
-    
+
     # Log each cancellation with a reason before writing
     for hearing_id, name, date, chamber_id, notes in to_cancel:
         reason = _classify_cancellation_reason(notes)
@@ -194,7 +200,7 @@ def cancel_missing_hearings(cur):
                 f"reason: {reason}"
             )
         )
-    
+
     # Add value to canceled_at
     cancel_query = """
         UPDATE {schema}.{hearings} h
@@ -209,13 +215,13 @@ def cancel_missing_hearings(cur):
             AND s.time_normalized IS NOT DISTINCT FROM h.time_normalized
         )
     """.format(
-            schema=SNAPSHOT_SCHEMA, 
-            hearings=HEARINGS_TABLE, 
-            stage=INCOMING_HEARINGS_TABLE
-        )
-    
+        schema=SNAPSHOT_SCHEMA, hearings=HEARINGS_TABLE, stage=INCOMING_HEARINGS_TABLE
+    )
+
     cur.execute(cancel_query)
-    logger.info(f"Canceled hearings missing from incoming data: {cur.rowcount} affected")
+    logger.info(
+        f"Canceled hearings missing from incoming data: {cur.rowcount} affected"
+    )
     return
 
 
@@ -227,13 +233,12 @@ def update_hearing_committee_ids(cur):
         WHERE LOWER(h.name) = LOWER(c.name)
         AND h.chamber_id = c.chamber_id
         AND h.committee_id IS NULL
-    """.format(
-        schema=SNAPSHOT_SCHEMA, 
-        hearings=HEARINGS_TABLE
-        )
-    
+    """.format(schema=SNAPSHOT_SCHEMA, hearings=HEARINGS_TABLE)
+
     cur.execute(update_query)
-    logger.info(f"Updated committee IDs where name match found: {cur.rowcount} rows affected")
+    logger.info(
+        f"Updated committee IDs where name match found: {cur.rowcount} rows affected"
+    )
     return
 
 
@@ -315,13 +320,13 @@ def upsert_hearing_bills(cur):
             footnote        = EXCLUDED.footnote,
             footnote_symbol = EXCLUDED.footnote_symbol
     """.format(
-            stage=INCOMING_HEARING_BILLS_TABLE,
-            schema=SNAPSHOT_SCHEMA,
-            hearings=HEARINGS_TABLE,
-            session=CURRENT_SESSION,
-            hearing_bills=HEARING_BILLS_TABLE
-        )
-    
+        stage=INCOMING_HEARING_BILLS_TABLE,
+        schema=SNAPSHOT_SCHEMA,
+        hearings=HEARINGS_TABLE,
+        session=CURRENT_SESSION,
+        hearing_bills=HEARING_BILLS_TABLE,
+    )
+
     cur.execute(upsert_query)
     logger.info(f"Upserted hearing-bill associations: {cur.rowcount} rows affected")
     return
@@ -352,15 +357,17 @@ def delete_removed_hearing_bills(cur):
             AND s.event_text = h.name
         )
     """.format(
-            schema=SNAPSHOT_SCHEMA,
-            hearing_bills=HEARING_BILLS_TABLE,
-            hearings=HEARINGS_TABLE,
-            stage=INCOMING_HEARING_BILLS_TABLE,
-            session=CURRENT_SESSION
-        )
-    
+        schema=SNAPSHOT_SCHEMA,
+        hearing_bills=HEARING_BILLS_TABLE,
+        hearings=HEARINGS_TABLE,
+        stage=INCOMING_HEARING_BILLS_TABLE,
+        session=CURRENT_SESSION,
+    )
+
     cur.execute(delete_query)
-    logger.info(f"Deleted hearing-bill associations if lost from incoming: {cur.rowcount} rows affected")
+    logger.info(
+        f"Deleted hearing-bill associations if lost from incoming: {cur.rowcount} rows affected"
+    )
     return
 
 
@@ -384,12 +391,12 @@ def log_dropped_hearing_bills(cur):
             AND b.session = '{session}'
         );
     """.format(
-            stage=INCOMING_HEARING_BILLS_TABLE,
-            schema=SNAPSHOT_SCHEMA,
-            hearings=HEARINGS_TABLE,
-            session=CURRENT_SESSION
-        )
-    
+        stage=INCOMING_HEARING_BILLS_TABLE,
+        schema=SNAPSHOT_SCHEMA,
+        hearings=HEARINGS_TABLE,
+        session=CURRENT_SESSION,
+    )
+
     cur.execute(log_query)
     dropped = cur.fetchall()
     if dropped:
@@ -397,7 +404,9 @@ def log_dropped_hearing_bills(cur):
             f"{len(dropped)} hearing bill rows could not be matched and were dropped:"
         )
         for row in dropped:
-            logger.info(f"  bill={row[0]}, hearing={row[1]}, date={row[2]}, chamber={row[3]}")
+            logger.info(
+                f"  bill={row[0]}, hearing={row[1]}, date={row[2]}, chamber={row[3]}"
+            )
     else:
         logger.info("All hearing bill rows matched successfully")
     return
@@ -408,9 +417,7 @@ DEADLINE_TYPE = "letter"
 
 
 def upsert_hearing_deadlines(
-        cur,
-        lead_days=DEADLINE_LEAD_DAYS,
-        deadline_type=DEADLINE_TYPE
+    cur, lead_days=DEADLINE_LEAD_DAYS, deadline_type=DEADLINE_TYPE
 ):
     update_stale_query = """
         UPDATE {schema}.hearing_deadlines hd
@@ -419,11 +426,8 @@ def upsert_hearing_deadlines(
         WHERE hd.hearing_id = h.hearing_id
         AND hd.deadline_type = %s
         AND hd.deadline_date != h.date - INTERVAL '{lead} days'
-    """.format(
-            schema=SNAPSHOT_SCHEMA,
-            lead=lead_days
-        )
-    
+    """.format(schema=SNAPSHOT_SCHEMA, lead=lead_days)
+
     cur.execute(update_stale_query, (deadline_type,))
     logger.info(f"Updated stale hearing deadlines: {cur.rowcount} rows affected")
 
@@ -437,23 +441,20 @@ def upsert_hearing_deadlines(
             %s AS deadline_type
         FROM {schema}.hearings h
         ON CONFLICT ON CONSTRAINT unique_deadline DO NOTHING;
-    """.format(
-            schema=SNAPSHOT_SCHEMA,
-            lead=lead_days
-        )
-    
+    """.format(schema=SNAPSHOT_SCHEMA, lead=lead_days)
+
     cur.execute(insert_query, (deadline_type,))
 
     logger.info(
         (
-            f"Inserted new hearing deadlines ({lead_days} day lead, " 
+            f"Inserted new hearing deadlines ({lead_days} day lead, "
             f"type='{deadline_type}'): {cur.rowcount} rows affected"
         )
     )
     return
 
 
-def update(cur, hearings_data, hearing_bills_data):
+def upsert(cur, hearings_data, hearing_bills_data):
     # -- Phase 1: Hearing-level changes
     stage_incoming_hearings(cur, hearings_data)
     upsert_hearings(cur)
@@ -468,6 +469,7 @@ def update(cur, hearings_data, hearing_bills_data):
     upsert_hearing_bills(cur)
     upsert_hearing_deadlines(cur)
     return
+
 
 if __name__ == "__main__":
     import pickle
