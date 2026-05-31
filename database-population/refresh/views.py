@@ -25,7 +25,7 @@ def refresh(cur):
         try:
             logger.info(f"Refreshing materialized view - {view}")
             start = time.time()
-            cur.execute(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {APP_SCHEMA}.{view}")
+            cur.execute(f"REFRESH MATERIALIZED VIEW {APP_SCHEMA}.{view}")
             elapsed = time.time() - start
             logger.info(f"{cur.statusmessage} ({elapsed:.2f}s)")
         except Exception as e:
