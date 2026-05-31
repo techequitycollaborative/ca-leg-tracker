@@ -36,3 +36,10 @@ BILL_VOTE_COLUMNS:
     - "yes_count"
     - "no_count"
     - "other_count"
+
+CONTACTS_COLUMNS:
+    - "openstates_people_id"
+    - "staffer_contact"
+    - "generated_email"
+    - "issue_area"
+    - "staffer_type"
