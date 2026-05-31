@@ -53,7 +53,7 @@ def fetch_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_page=
 
     Fetch arrays of bill and bill actions/sponsors/votes since last update
     """
-
+    logger.info("Fetching bill updates...")
     df_bills = pd.DataFrame(columns=BILL_COLUMNS)
     df_bill_actions = pd.DataFrame(columns=BILL_ACTION_COLUMNS)
     df_bill_sponsors = pd.DataFrame(columns=BILL_SPONSOR_COLUMNS)
