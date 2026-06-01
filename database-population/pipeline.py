@@ -16,7 +16,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-def run_pipeline(force_update=False):
+def run_pipeline(force_update=False, dev_mode=False):
     start_time = time.time()
     current_step = "initializing"
 
@@ -126,7 +126,8 @@ def run_pipeline(force_update=False):
                 f"total_runtime={stats['runtime_seconds']:2f}s"
             )
         )
-        send_pipeline_success_alert(stats)
+        if not dev_mode:
+            send_pipeline_success_alert(stats)
 
     except Exception as e:
         stats["runtime_seconds"] = time.time() - start_time
@@ -135,8 +136,9 @@ def run_pipeline(force_update=False):
             exc_info=True,
         )
         error_details = f"Step that failed: {current_step}\nError: {str(e)}\n\nTraceback:\n{traceback.format_exc()}"
-        send_pipeline_failure_alert(
-            f"Pipeline failed after {stats['runtime_seconds']:.2f} seconds",
-            error_details,
-        )
+        if not dev_mode:
+            send_pipeline_failure_alert(
+                f"Pipeline failed after {stats['runtime_seconds']:.2f} seconds",
+                error_details,
+            )
         raise

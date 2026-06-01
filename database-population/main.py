@@ -16,8 +16,13 @@ def main():
         action="store_true",
         help="Force update on snapshot schema without date filtering.",
     )
+    parser.add_argument(
+        "--dev",
+        action="store_true",
+        help="Dev mode (no Slackbot alerts).",
+    )
     args = parser.parse_args()
-    run_pipeline(force_update=args.force_update)
+    run_pipeline(force_update=args.force_update, dev_mode=args.dev)
 
 
 if __name__ == "__main__":
