@@ -31,10 +31,10 @@ def scrape_committee_hearing(
     # Generate start and end dates for a query on the Senate calendar
     start_date, end_date, query_url = utils.get_start_end_query(source_url)
     if verbose:
-        logger.info(
+        logger.debug(
             "Querying for Senate events from {} to {}".format(start_date, end_date)
         )
-        logger.info(query_url)
+        logger.debug(query_url)
 
     # Calendar v2.0
     hearing_cache = {}  # key: (date, name) -> {'index': int, 'bills': set, ...}
@@ -45,11 +45,11 @@ def scrape_committee_hearing(
         # iterate over date wrapper blocks
         page.wait_for_selector("div.page-events--day-wrapper")
         if verbose:
-            logger.info("Found events by date")
+            logger.debug("Found events by date")
         wrappers = page.locator("div.page-events--day-wrapper")
         wrapper_count = wrappers.count()
 
-        logger.info("Preparing to scrape Senate Daily File")
+        logger.debug("Preparing to scrape Senate Daily File")
         for i in range(wrapper_count):
             # Extract current date
             current_wrapper = wrappers.nth(i)
@@ -57,15 +57,15 @@ def scrape_committee_hearing(
                 current_wrapper.locator("h2.page-events__date").first.inner_text()
             )
             if verbose:
-                logger.info("Extracting {}".format(current_date))
+                logger.debug("Extracting {}".format(current_date))
             # Detect empty content
             empty_wrapper = page.locator("div.no-results-message")
 
             if empty_wrapper.count() > 0:
-                logger.info(f"No events scheduled for {current_date}")
+                logger.debug(f"No events scheduled for {current_date}")
             else:
                 if verbose:
-                    logger.info("Looking for events")
+                    logger.debug("Looking for events")
 
                 # Examine committee hearing content
                 committee_hearing_section = current_wrapper.locator(
@@ -75,7 +75,7 @@ def scrape_committee_hearing(
                     "div.page-events__item.page-events__item--committee-hearing"
                 )
                 if verbose:
-                    logger.info("Found {} hearings".format(hearing_elements.count()))
+                    logger.debug("Found {} hearings".format(hearing_elements.count()))
                 # Iterate over individual hearings
                 for j in range(hearing_elements.count()):
                     # Extract current hearing details
@@ -108,7 +108,7 @@ def scrape_committee_hearing(
                         logger.warning(
                             f"No time or location details could be extracted for {current_name} on {current_date}"
                         )
-                        logger.info(current_details)
+                        logger.debug(current_details)
                         continue
 
                     hearing_key = (
@@ -154,11 +154,11 @@ def scrape_committee_hearing(
                         symbol_to_footnote = utils.extract_footnote_symbol(
                             has_footnotes
                         )
-                        logger.info(f"Footnote to symbol map:\n{symbol_to_footnote}")
+                        logger.debug(f"Footnote to symbol map:\n{symbol_to_footnote}")
                     # Extract all HTML elements with the measure identifier
                     measure_selector = soup.select("span.Measure")
                     if verbose:
-                        logger.info("Found {} measures".format(len(measure_selector)))
+                        logger.debug("Found {} measures".format(len(measure_selector)))
 
                     current_bills = utils.collect_measure_order_footnotes(
                         measure_selector, footnote_map=symbol_to_footnote
@@ -202,7 +202,7 @@ def scrape_committee_hearing(
                     close_button.click()
 
         browser.close()
-        logger.info("Closed Senate browser")
+        logger.debug("Closed Senate browser")
 
     except Exception as e:
         logger.error(f"[SEN] Daily File scrape failed: {e}")
@@ -216,44 +216,7 @@ def scrape_committee_hearing(
             handler.stop()
 
     # Build final results from cache
-    hearings_normalized = set()
-    bills_natural_key = set()
-
-    for cached in hearing_cache.values():
-        hearings_normalized.add(
-            (
-                cached["chamber_id"],
-                cached["name"],
-                cached["date"],
-                cached["time_verbatim"],
-                cached["time_normalized"],
-                cached["is_allday"],
-                cached["location"],
-                cached["room"],
-                cached["notes"],
-            )
-        )
-
-        for bill in cached["bills"]:
-            bill_name = f"{bill["type"]} {bill["number"]}"
-
-            # Manually reorder attributes to minimize refactor
-            bills_natural_key.add(
-                (
-                    cached["chamber_id"],
-                    cached["date"],
-                    cached["name"],
-                    cached["time_verbatim"],
-                    cached["location"],
-                    cached["room"],
-                    bill_name,
-                    bill["file_order"],
-                    bill["footnote"],
-                    bill["note_symbol"],
-                )
-            )
-    # Concatenate the results into a set
-    return hearings_normalized, bills_natural_key
+    return utils.normalize_scraper_results(hearing_cache, "SEN")
 
 
 def main():

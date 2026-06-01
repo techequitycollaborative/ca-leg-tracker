@@ -90,16 +90,8 @@ def upsert_hearings(cur):
             chamber_id, name, date, time_verbatim, time_normalized, is_allday, 
             location, room, notes
         )
-        SELECT
-            CASE
-                WHEN LOWER(name) LIKE '%joint legislative audit%'
-                OR (LOWER(name) LIKE '%assembly%' AND LOWER(name) LIKE '%senate%') THEN 5
-                WHEN LOWER(name) LIKE '%joint%' AND chamber_id = 1 THEN 3
-                WHEN LOWER(name) LIKE '%joint%' AND chamber_id = 2 THEN 4
-                ELSE chamber_id
-            END AS chamber_id, 
-            name, date, time_verbatim, time_normalized, is_allday, location, 
-            room, notes
+        SELECT chamber_id, name, date, time_verbatim, time_normalized, is_allday, 
+               location, room, notes
         FROM {stage}
         ON CONFLICT (chamber_id, name, date, time_verbatim) DO UPDATE SET
             time_verbatim   = EXCLUDED.time_verbatim,

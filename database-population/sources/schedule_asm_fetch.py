@@ -52,13 +52,13 @@ def scrape_committee_hearing(
         # Navigate to committee hearings tab
         page.wait_for_selector("div.details-wrapper-committee-hearing")
         if verbose:
-            logger.info("Found committee hearings tab")
+            logger.debug("Found committee hearings tab")
 
         # Get pointers to each table row corresponding to a hearing
         hearing_rows = page.locator("tr.committee-hearing-details")
         hearing_count = hearing_rows.count()
         if verbose:
-            logger.info(f"Found {hearing_count} hearings")
+            logger.debug(f"Found {hearing_count} hearings")
 
         # for each hearing
         for i in range(hearing_count):
@@ -105,12 +105,12 @@ def scrape_committee_hearing(
 
             if "View Agenda" not in row_menu_contents:
                 if verbose:
-                    logger.info(f"No agenda found for {details["name"]}")
+                    logger.debug(f"No agenda found for {details["name"]}")
                 # Close the dropdown menu by clicking the button again
                 hearing_menu.click()
                 page.wait_for_timeout(500)
             else:  # Check for bills on the hearing agenda
-                logger.info("Clicking current hearing agenda")
+                logger.debug("Clicking current hearing agenda")
                 agenda_link = current_hearing.locator(
                     'a[href*="/api/dailyfile/agenda"]'
                 )
@@ -144,7 +144,7 @@ def scrape_committee_hearing(
                 # Extract measures
                 measure_selector = soup.select("span.Measure")
                 if verbose:
-                    logger.info("Found {} measures".format(len(measure_selector)))
+                    logger.debug("Found {} measures".format(len(measure_selector)))
 
                 hearing_bills = utils.collect_measure_order_footnotes(
                     measure_selector, footnote_map=footnote_map
@@ -206,44 +206,7 @@ def scrape_committee_hearing(
             handler.stop()
 
     # Build final results from cache
-    hearings_normalized = set()
-    bills_natural_key = set()
-
-    for cached in hearing_cache.values():
-        hearings_normalized.add(
-            (
-                cached["chamber_id"],
-                cached["name"],
-                cached["date"],
-                cached["time_verbatim"],
-                cached["time_normalized"],
-                cached["is_allday"],
-                cached["location"],
-                cached["room"],
-                cached["notes"],
-            )
-        )
-
-        for bill in cached["bills"]:
-            bill_name = f"{bill["type"]} {bill["number"]}"
-
-            # Manually reorder attributes to minimize refactor
-            bills_natural_key.add(
-                (
-                    cached["chamber_id"],
-                    cached["date"],
-                    cached["name"],
-                    cached["time_verbatim"],
-                    cached["location"],
-                    cached["room"],
-                    bill_name,
-                    bill["file_order"],
-                    bill["footnote"],
-                    bill["note_symbol"],
-                )
-            )
-    # Concatenate the results into a set
-    return hearings_normalized, bills_natural_key
+    return utils.normalize_scraper_results(hearing_cache, "ASM")
 
 
 def main():
