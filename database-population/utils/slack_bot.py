@@ -8,6 +8,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def send_slack_alert(message, channel=None, color="danger"):
     """
     Send an alert to Slack.
@@ -77,6 +78,7 @@ def send_pipeline_success_alert(stats):
     
 • Bills updated: {stats.get('bills_updated', 0)}
 • Hearings updated: {stats.get('hearings_updated', 0)}
+• Contacts updated: {stats.get('contacts_updated', 0)}
 • Topics updated: {stats.get('topics_updated', 0)}
 • Runtime (data fetch): {stats.get('fetch_runtime_seconds', 0):.2f} seconds
 • Runtime (DB write): {stats.get('db_write_runtime_seconds', 0):.2f} seconds

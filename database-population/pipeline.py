@@ -4,7 +4,7 @@ import time
 import traceback
 import logging
 
-from snapshots import bills, hearings, topics
+from snapshots import bills, hearings, topics, contacts
 from refresh import views
 from utils.slack_bot import send_pipeline_success_alert, send_pipeline_failure_alert
 
@@ -16,7 +16,7 @@ logging.basicConfig(
 log = logging.getLogger(__name__)
 
 
-def run_pipeline(force_update=False):
+def run_pipeline(force_update=False, dev_mode=False):
     start_time = time.time()
     current_step = "initializing"
 
@@ -24,6 +24,7 @@ def run_pipeline(force_update=False):
     stats = {
         "bills_updated": 0,
         "hearings_updated": 0,
+        "contacts_updated": 0,
         "fetch_runtime_seconds": 0,
         "db_write_runtime_seconds": 0,
         "db_view_runtime_seconds": 0,
@@ -36,14 +37,23 @@ def run_pipeline(force_update=False):
         )
 
         # --- Phase 1: Fetch (no DB connection open) ---
-        log.info("Fetching bill updates...")
         current_step = "bills fetch"
         last_update = bills.get_last_update_timestamp()
         bill_updates = bills.fetch_updates(last_update)
         n_bills = len(bill_updates["bills"].index)
         log.info(f"Bill fetch complete | rows={n_bills}")
 
-        log.info("Fetching hearing schedule...")
+        current_step = "contacts fetch"
+        contact_updates = contacts.fetch_updates()
+        for chamber, contact_data in contact_updates.items():
+            log.info(
+                (
+                    f"{chamber} Codex fetch complete | "
+                    f"issues={len(contact_data)}, "
+                    f"contacts={sum([len(df) for df in contact_data.values()])}"
+                )
+            )
+
         current_step = "hearings fetch"
         hearing_schedule, bill_schedule = hearings.fetch_updates()
         log.info(
@@ -61,20 +71,28 @@ def run_pipeline(force_update=False):
             current_step = "bills write"
             if n_bills > 0 or force_update:
                 log.info(
-                    f"Upserting bills | rows={n_bills}, force_update={force_update}"
+                    f"Upserting bills | rows = {n_bills}, force_update={force_update}"
                 )
                 bills.upsert(cur, bill_updates)
                 stats["bills_updated"] = n_bills
             else:
                 log.info("No bill updates to write, skipping")
 
+            current_step = "contacts write"
+            for chamber, contact_data in contact_updates.items():
+                log.info(
+                    f"Refreshing {chamber} contacts | rows = {sum([len(df) for df in contact_data.values()])}"
+                )
+                contacts.update(cur, contact_data, chamber)
+                stats["contacts_updated"] += sum([len(df) for df in contact_data.values()])
+            
             # TODO: add topics
             current_step = "hearings write"
             if len(hearing_schedule):
                 log.info(
-                    f"Clearing and re-inserting hearings | rows = {len(hearing_schedule)}"
+                    f"Upserting hearing info and scheduled bills"
                 )
-                hearings.update(cur, hearing_schedule, bill_schedule)
+                hearings.upsert(cur, hearing_schedule, bill_schedule)
                 stats["hearings_updated"] = len(hearing_schedule)
             else:
                 log.info("No hearing updates to write, skipping")
@@ -83,7 +101,7 @@ def run_pipeline(force_update=False):
 
         # --- Phase 3: Refresh (second DB connection) ---
         view_start = time.time()
-        log.info("Opening DB transaction (writes)...")
+        log.info("Opening DB transaction (refresh)...")
         with db.get_cursor() as cur:
             current_step = "views refresh"
             log.info("Refreshing materialized views...")
@@ -101,13 +119,15 @@ def run_pipeline(force_update=False):
                 "Pipeline complete | "
                 f"bills={stats['bills_updated']} "
                 f"hearings={stats['hearings_updated']} "
+                f"contacts={stats['contacts_updated']} "
                 f"fetch_runtime={stats['fetch_runtime_seconds']:2f}s "
                 f"db_write_runtime={stats['db_write_runtime_seconds']:2f}s "
                 f"db_view_runtime={stats['db_view_runtime_seconds']:2f}s "
                 f"total_runtime={stats['runtime_seconds']:2f}s"
             )
         )
-        send_pipeline_success_alert(stats)
+        if not dev_mode:
+            send_pipeline_success_alert(stats)
 
     except Exception as e:
         stats["runtime_seconds"] = time.time() - start_time
@@ -116,8 +136,9 @@ def run_pipeline(force_update=False):
             exc_info=True,
         )
         error_details = f"Step that failed: {current_step}\nError: {str(e)}\n\nTraceback:\n{traceback.format_exc()}"
-        send_pipeline_failure_alert(
-            f"Pipeline failed after {stats['runtime_seconds']:.2f} seconds",
-            error_details,
-        )
+        if not dev_mode:
+            send_pipeline_failure_alert(
+                f"Pipeline failed after {stats['runtime_seconds']:.2f} seconds",
+                error_details,
+            )
         raise

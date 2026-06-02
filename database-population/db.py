@@ -26,7 +26,7 @@ def get_cursor():
         cur = conn.cursor()
         yield cur
         conn.commit()
-        logger.info("Transaction committed")
+        logger.debug("Transaction committed")
     except psycopg2.DatabaseError as e:
         if conn:
             conn.rollback()
@@ -40,4 +40,4 @@ def get_cursor():
     finally:
         if conn:
             conn.close()
-            logger.info("Database connection closed")
+            logger.debug("Database connection closed")

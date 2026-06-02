@@ -12,7 +12,7 @@ SHEET_LINKS = {
 
 KEYWORDS_TO_SKIP = {"VICE CHAIR", "CHAIR", "By issue area"}
 
-SEPARATORS = ["\+", "/", "&", ",", " and ", ";", "\\n"]
+SEPARATORS = ["\\+", "/", "&", ",", " and ", ";", "\\n"]
 
 
 def build_sheet_url(source_url: str) -> str:
@@ -26,7 +26,7 @@ def scrape_clean_sheet(chamber: str) -> pd.DataFrame:
 
     # read CSV into memory and convert to DF
     df = pd.read_csv(source)
-    logger.info("Google sheet loaded as CSV and converted to DataFrame")
+    logger.debug("Google sheet loaded as CSV and converted to DataFrame")
 
     ### CLEAN
     # convert district strings into integer for DB join
@@ -34,17 +34,17 @@ def scrape_clean_sheet(chamber: str) -> pd.DataFrame:
         df["district_number"] = df["District"].str.replace("AD", "").astype(int)
     else:
         df["district_number"] = df["District"].str.replace("SD", "").astype(int)
-    logger.info("Converted district identifiers to integers")
+    logger.debug("Converted district identifiers to integers")
 
     # drop vacant districts
     df = df.loc[~df["Member"].str.contains("ZZ-VACANT")]
-    logger.info("Removed vacant districts")
+    logger.debug("Removed vacant districts")
 
     # TODO: verify surname and district number matches OpenStates data
 
     # drop redundant ID columns
     df = df.drop(columns=["District", "Party", "Member"])
-    logger.info("Drop redundant identification columns")
+    logger.debug("Drop redundant identification columns")
     return df
 
 
@@ -56,12 +56,12 @@ def extract_contacts(chamber: str) -> List[pd.DataFrame]:
     domain_email = f"@{chamber.lower()}.ca.gov"
     # Loop ends before the final 'district_number' column
     for issue in sheet_df.columns[:-1]:
-        logger.info(f"Processing {issue}...")
+        logger.debug(f"Processing {issue}...")
 
         # Skip null/empty/whitespace-only values at the start - no need to store
         valid_rows = sheet_df[issue].notna() & (sheet_df[issue].str.strip() != "")
         contacts = sheet_df.loc[valid_rows, [issue, "district_number"]].copy()
-        logger.info("Filter empty rows")
+        logger.debug("Filter empty rows")
 
         # add default staffer type
         contacts["staffer_type"] = "office"
@@ -69,11 +69,11 @@ def extract_contacts(chamber: str) -> List[pd.DataFrame]:
         contacts.loc[contacts[issue].str.contains("CHAIR|CMTE"), ["staffer_type"]] = (
             "committee"
         )
-        logger.info("Extract staffer type")
+        logger.debug("Extract staffer type")
 
         # add issue area
         contacts["issue_area"] = issue
-        logger.info("Extract issue area")
+        logger.debug("Extract issue area")
 
         # clean and normalize names: format, specifiers, nicknames, etc.
         contacts[issue] = (
@@ -82,18 +82,18 @@ def extract_contacts(chamber: str) -> List[pd.DataFrame]:
                 ".", " ", regex=False
             )  # Handle internal periods "Foo.X.Bar" -> "Foo X Bar"
             .str.replace("CMTE/", "")
-            .str.replace("VICE CHAIR (-|\|) ", "", regex=True)
-            .str.replace("CHAIR (-|\|) ", "", regex=True)
-            .str.replace("\(\w+\) ", "", regex=True)
+            .str.replace(r"VICE CHAIR (\\||-) ", "", regex=True)
+            .str.replace("CHAIR (\\||-) ", "", regex=True)
+            .str.replace(r"\(\w+\) ", "", regex=True)
             .str.replace(r"\s+", " ", regex=True)  # Collapse multiple spaces
             .str.strip()
         )
-        logger.info("Normalize staffer names")
+        logger.debug("Normalize staffer names")
 
         # split and explode aggregated staffers when they appear
         contacts[issue + "_values"] = contacts[issue].str.split("|".join(SEPARATORS))
         contacts = contacts.explode(issue + "_values").drop(columns=[issue])
-        logger.info("Split aggregated staffer names")
+        logger.debug("Split aggregated staffer names")
 
         # strip extra whitespace
         contacts[f"{issue}_values"] = contacts[f"{issue}_values"].str.strip()
@@ -107,7 +107,7 @@ def extract_contacts(chamber: str) -> List[pd.DataFrame]:
         # Assign parts to columns (only first and last name, ignore middle name)
         contacts["first_name"] = split_names.str.get(0)
         contacts["last_name"] = split_names.str.get(-1)  # Always last element
-        logger.info("Split staffer names into parts")
+        logger.debug("Split staffer names into parts")
 
         # Generate email (first.last@chamber.ca.gov) except for skip conditions
         contacts["generated_email"] = np.where(
@@ -118,7 +118,7 @@ def extract_contacts(chamber: str) -> List[pd.DataFrame]:
             + contacts["last_name"].str.lower()
             + domain_email,
         )
-        logger.info("Generate emails with NA value when skipping")
+        logger.debug("Generate emails with NA value when skipping")
 
         # Rename issue column to staffer name
         contacts = contacts.rename(columns={issue: "staffer_contact"})
@@ -134,7 +134,7 @@ def extract_contacts(chamber: str) -> List[pd.DataFrame]:
             ]
         ]
         results[issue] = final
-        logger.info(f"{issue} extraction complete")
+        logger.debug(f"{issue} extraction complete")
     return results
 
 

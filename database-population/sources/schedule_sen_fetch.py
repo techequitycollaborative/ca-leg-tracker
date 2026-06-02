@@ -23,6 +23,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 # TODO: refactor with Python classes for readability
 def scrape_committee_hearing(
     source_url="https://www.senate.ca.gov/calendar", verbose=False
@@ -30,8 +31,10 @@ def scrape_committee_hearing(
     # Generate start and end dates for a query on the Senate calendar
     start_date, end_date, query_url = utils.get_start_end_query(source_url)
     if verbose:
-        logger.info("Querying for Senate events from {} to {}".format(start_date, end_date))
-        logger.info(query_url)
+        logger.debug(
+            "Querying for Senate events from {} to {}".format(start_date, end_date)
+        )
+        logger.debug(query_url)
 
     # Calendar v2.0
     hearing_cache = {}  # key: (date, name) -> {'index': int, 'bills': set, ...}
@@ -42,11 +45,11 @@ def scrape_committee_hearing(
         # iterate over date wrapper blocks
         page.wait_for_selector("div.page-events--day-wrapper")
         if verbose:
-            logger.info("Found events by date")
+            logger.debug("Found events by date")
         wrappers = page.locator("div.page-events--day-wrapper")
         wrapper_count = wrappers.count()
 
-        logger.info("Preparing to scrape Senate Daily File")
+        logger.debug("Preparing to scrape Senate Daily File")
         for i in range(wrapper_count):
             # Extract current date
             current_wrapper = wrappers.nth(i)
@@ -54,15 +57,15 @@ def scrape_committee_hearing(
                 current_wrapper.locator("h2.page-events__date").first.inner_text()
             )
             if verbose:
-                logger.info("Extracting {}".format(current_date))
+                logger.debug("Extracting {}".format(current_date))
             # Detect empty content
             empty_wrapper = page.locator("div.no-results-message")
 
             if empty_wrapper.count() > 0:
-                logger.info(f"No events scheduled for {current_date}")
+                logger.debug(f"No events scheduled for {current_date}")
             else:
                 if verbose:
-                    logger.info("Looking for events")
+                    logger.debug("Looking for events")
 
                 # Examine committee hearing content
                 committee_hearing_section = current_wrapper.locator(
@@ -72,7 +75,7 @@ def scrape_committee_hearing(
                     "div.page-events__item.page-events__item--committee-hearing"
                 )
                 if verbose:
-                    logger.info("Found {} hearings".format(hearing_elements.count()))
+                    logger.debug("Found {} hearings".format(hearing_elements.count()))
                 # Iterate over individual hearings
                 for j in range(hearing_elements.count()):
                     # Extract current hearing details
@@ -105,7 +108,7 @@ def scrape_committee_hearing(
                         logger.warning(
                             f"No time or location details could be extracted for {current_name} on {current_date}"
                         )
-                        logger.info(current_details)
+                        logger.debug(current_details)
                         continue
 
                     hearing_key = (
@@ -113,7 +116,7 @@ def scrape_committee_hearing(
                         current_name,
                         current_time_verbatim,
                         current_location,
-                        current_room
+                        current_room,
                     )
 
                     # Extract every bill on the agenda
@@ -134,17 +137,13 @@ def scrape_committee_hearing(
                     # Parse with BeautifulSoup
                     soup = bs(modal_html, "html.parser")
 
-                                        # Extract hearing notes if available
+                    # Extract hearing notes if available
                     # use HearingTopic for general notes with "; " separator
                     current_note = ""
                     topics = soup.select("span.HearingTopic")
                     logger.debug(topics)
                     current_note = "; ".join(
-                        [
-                            t.text.lower().strip()
-                            for t in topics
-                            if "_" not in t.text
-                        ]
+                        [t.text.lower().strip() for t in topics if "_" not in t.text]
                     )
                     logger.debug(f"Note extracted: {current_note}")
 
@@ -152,49 +151,48 @@ def scrape_committee_hearing(
                     has_footnotes = soup.select_one("span.MeasureFootNotes")
                     symbol_to_footnote = None
                     if has_footnotes:
-                        symbol_to_footnote = utils.extract_footnote_symbol(has_footnotes)
-                        logger.info(
-                            f"Footnote to symbol map:\n{symbol_to_footnote}"
+                        symbol_to_footnote = utils.extract_footnote_symbol(
+                            has_footnotes
                         )
+                        logger.debug(f"Footnote to symbol map:\n{symbol_to_footnote}")
                     # Extract all HTML elements with the measure identifier
                     measure_selector = soup.select("span.Measure")
                     if verbose:
-                        logger.info("Found {} measures".format(len(measure_selector)))
+                        logger.debug("Found {} measures".format(len(measure_selector)))
 
                     current_bills = utils.collect_measure_order_footnotes(
-                        measure_selector,
-                        footnote_map=symbol_to_footnote
+                        measure_selector, footnote_map=symbol_to_footnote
                     )
 
                     if has_footnotes:
                         logger.debug(current_bills)
                     if hearing_key not in hearing_cache:
                         hearing_cache[hearing_key] = {
-                            'chamber_id': utils.transform_chamber_id(2, current_name),
-                            'name': current_name,
-                            'date': current_date,
-                            'time_verbatim': current_time_verbatim,
-                            'time_normalized': current_time,
-                            'is_allday': is_allday,
-                            'location': current_location,
-                            'room': current_room,
-                            'notes': current_note,
-                            'bills': current_bills,
-                            'index': j
+                            "chamber_id": utils.transform_chamber_id(2, current_name),
+                            "name": current_name,
+                            "date": current_date,
+                            "time_verbatim": current_time_verbatim,
+                            "time_normalized": current_time,
+                            "is_allday": is_allday,
+                            "location": current_location,
+                            "room": current_room,
+                            "notes": current_note,
+                            "bills": current_bills,
+                            "index": j,
                         }
-                    elif j > hearing_cache[hearing_key]['index']:
+                    elif j > hearing_cache[hearing_key]["index"]:
                         hearing_cache[hearing_key] = {
-                            'chamber_id': utils.transform_chamber_id(2, current_name),
-                            'name': current_name,
-                            'date': current_date,
-                            'time_verbatim': current_time_verbatim,
-                            'time_normalized': current_time,
-                            'is_allday': is_allday,
-                            'location': current_location,
-                            'room': current_room,
-                            'notes': current_note,
-                            'bills': current_bills,
-                            'index': j
+                            "chamber_id": utils.transform_chamber_id(2, current_name),
+                            "name": current_name,
+                            "date": current_date,
+                            "time_verbatim": current_time_verbatim,
+                            "time_normalized": current_time,
+                            "is_allday": is_allday,
+                            "location": current_location,
+                            "room": current_room,
+                            "notes": current_note,
+                            "bills": current_bills,
+                            "index": j,
                         }
                         if verbose:
                             logger.info(f"Replaced duplicate hearing: {hearing_key}")
@@ -204,7 +202,7 @@ def scrape_committee_hearing(
                     close_button.click()
 
         browser.close()
-        logger.info("Closed Senate browser")
+        logger.debug("Closed Senate browser")
 
     except Exception as e:
         logger.error(f"[SEN] Daily File scrape failed: {e}")
@@ -218,44 +216,8 @@ def scrape_committee_hearing(
             handler.stop()
 
     # Build final results from cache
-    hearings_normalized = set()
-    bills_natural_key = set()
+    return utils.normalize_scraper_results(hearing_cache, "SEN")
 
-    for cached in hearing_cache.values():
-        hearings_normalized.add(
-            (
-                cached['chamber_id'],
-                cached['name'],
-                cached['date'],
-                cached['time_verbatim'],
-                cached['time_normalized'],
-                cached['is_allday'],
-                cached['location'],
-                cached['room'],
-                cached['notes']
-            )
-        )
-
-        for bill in cached['bills']:
-            bill_name = f"{bill["type"]} {bill["number"]}"
-
-            # Manually reorder attributes to minimize refactor
-            bills_natural_key.add(
-                (
-                    cached['chamber_id'],
-                    cached['date'],
-                    cached['name'],
-                    cached['time_verbatim'],
-                    cached['location'],
-                    cached['room'],
-                    bill_name,
-                    bill['file_order'],
-                    bill['footnote'],
-                    bill['note_symbol']
-                )
-            )
-    # Concatenate the results into a set
-    return hearings_normalized, bills_natural_key
 
 def main():
     logging.basicConfig(level=logging.DEBUG)

@@ -11,4 +11,5 @@ RUN playwright install-deps chromium
 
 COPY . .
 
-CMD ["python", "main.py"]
+ENTRYPOINT ["python", "main.py"]
+CMD []

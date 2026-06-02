@@ -26,6 +26,74 @@ detail_fns = {
     "lower": lambda x: x.strip().lower(),
 }
 
+JOINT_ASM_SEN = lambda name: (
+    "joint legislative audit" in name.lower() or
+    ("assembly" in name.lower() and "senate" in name.lower())
+)
+
+def resolve_chamber_id(chamber_id, name):
+    n = name.lower()
+    if JOINT_ASM_SEN(name):
+        return 5
+    if "joint" in n and chamber_id == 1:
+        return 3
+    if "joint" in n and chamber_id == 2:
+        return 4
+    return chamber_id
+
+
+def normalize_scraper_results(hearing_cache: dict, chamber: str):
+    # Build final results from cache
+    hearings_normalized = set()
+    bills_natural_key = set()
+
+    joint_counts = {3: 0, 4: 0, 5:0}
+
+    for cached in hearing_cache.values():
+        resolved = resolve_chamber_id(cached["chamber_id"], cached["name"])
+        if resolved != cached["chamber_id"]:
+            joint_counts[resolved] += 1
+        
+        hearings_normalized.add(
+            (
+                resolved,
+                cached["name"],
+                cached["date"],
+                cached["time_verbatim"],
+                cached["time_normalized"],
+                cached["is_allday"],
+                cached["location"],
+                cached["room"],
+                cached["notes"],
+            )
+        )
+
+        for bill in cached["bills"]:
+            bill_name = f"{bill["type"]} {bill["number"]}"
+
+            # Manually reorder attributes to minimize refactor
+            bills_natural_key.add(
+                (
+                    resolved,
+                    cached["date"],
+                    cached["name"],
+                    cached["time_verbatim"],
+                    cached["location"],
+                    cached["room"],
+                    bill_name,
+                    bill["file_order"],
+                    bill["footnote"],
+                    bill["note_symbol"],
+                )
+            )
+
+    # Log results
+    for resolved_id, count in joint_counts.items():
+        if count:
+            logger.info(f"[{chamber}]: Joint hearings resolved to chamber_id={resolved_id}: {count} rows")
+    
+    # Concatenate the results into a set
+    return hearings_normalized, bills_natural_key
 
 def get_start_end_query(source_url):
     start_date = datetime.date.today()
@@ -69,7 +137,9 @@ def normalize_hearing_time(time_str):
             continue
 
     # If parsing fails, preserve as all-day and log
-    logger.warning(f"WARNING: could not parse time string '{time_str}', treating as all-day")
+    logger.warning(
+        f"WARNING: could not parse time string '{time_str}', treating as all-day"
+    )
     return None, True
 
 
@@ -114,17 +184,17 @@ def prettify_structure(content):
 
 def transform_chamber_id(chamber_id, name):
     name_lower = name.lower()
-    if 'joint legislative audit' in name_lower or (
-        'assembly' in name_lower and 'senate' in name_lower
+    if "joint legislative audit" in name_lower or (
+        "assembly" in name_lower and "senate" in name_lower
     ):
         return 5
-    elif 'joint' in name_lower and chamber_id == 1:
+    elif "joint" in name_lower and chamber_id == 1:
         return 3
-    elif 'joint' in name_lower and chamber_id == 2:
+    elif "joint" in name_lower and chamber_id == 2:
         return 4
     else:
         return chamber_id
-    
+
 
 def extract_footnote_symbol(sel):
     result = dict()
@@ -157,13 +227,13 @@ def extract_measure_num_symbol(sel):
         return {
             "type": m_type.text.replace(".", ""),
             "number": m_num.contents[-1].strip(),
-            "note_symbol": m_symbol.text
+            "note_symbol": m_symbol.text,
         }
     else:
         return {
             "type": m_type.text.replace(".", ""),
             "number": m_num.contents[-1].strip(),
-            "note_symbol": None
+            "note_symbol": None,
         }
 
 
@@ -177,7 +247,7 @@ def collect_measure_order_footnotes(sel, footnote_map=None):
             logger.debug("Matched symbol to footnote")
             measure_details["footnote"] = footnote_map[measure_details["note_symbol"]]
         else:
-            measure_details["footnote"] = None 
+            measure_details["footnote"] = None
         results.append(measure_details)
     return results
 
@@ -225,7 +295,7 @@ def make_page(url, max_retries=3, timeout=30000, headless=True):
                         "--disable-setuid-sandbox",
                         "--disable-dev-shm-usage",  # /dev/shm is often too small in Docker
                         "--disable-gpu",
-                    ]
+                    ],
                 )
                 # User agent, viewport, locale to avoid detection
                 context = browser.new_context(
@@ -240,7 +310,9 @@ def make_page(url, max_retries=3, timeout=30000, headless=True):
 
                 # Randomized delay
                 delay = random.uniform(0.5, 3)
-                logger.info(f"Attempt {attempt+1}: Delay {delay:.2f}s ({user_agent[:30]}...)")
+                logger.info(
+                    f"Attempt {attempt+1}: Delay {delay:.2f}s ({user_agent[:30]}...)"
+                )
                 sleep(delay)
 
                 # Attempt navigation

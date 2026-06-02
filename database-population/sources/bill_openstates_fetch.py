@@ -176,19 +176,23 @@ def fetch_bill_batch(page, updated_since):
         params["updated_since"] = updated_since
 
     response = requests.get(url=ENDPOINTS["bills"], params=params)
-    
+
     # Log and raise on bad HTTP status (4xx, 5xx) before attempting .json()
     try:
         response.raise_for_status()
     except requests.exceptions.HTTPError as e:
-        logging.error(f"HTTP {response.status_code} on page {page}: {response.text[:500]}")
+        logging.error(
+            f"HTTP {response.status_code} on page {page}: {response.text[:500]}"
+        )
         raise  # re-raise so tenacity can retry it
 
     # Now attempt JSON parsing with visibility into what went wrong
     try:
         result = response.json()
     except ValueError:
-        logging.error(f"JSON decode failed on page {page}. Raw response: {response.text[:500]}")
+        logging.error(
+            f"JSON decode failed on page {page}. Raw response: {response.text[:500]}"
+        )
         raise  # re-raise so tenacity retries
 
     return result["results"], result["pagination"]["max_page"]
