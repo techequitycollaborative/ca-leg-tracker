@@ -480,4 +480,4 @@ if __name__ == "__main__":
         logger.info("Fetched and cached source data")
 
     with db.get_cursor() as cur:
-        update(cur, hearings, bills)
+        upsert(cur, hearings, bills)
