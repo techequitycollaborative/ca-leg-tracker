@@ -10,7 +10,7 @@ population relies on configuration of a developer's credentials (see below). The
 Data that can't be sourced through OpenStates will be scraped by the relevant `*_scraper.py` or `*_parser.py` file. 
 
 ## `database-scripts`
-Scripts in this folder generate the postgreSQL schemas and tables as the back-end of a legislation tracker. _⚠️ This folder is no longer under active development; see db folder in this repository instead for the latest database architecture. ⚠️_
+Scripts in this folder generate the postgreSQL schemas and tables as the back-end of a legislation tracker. _⚠️ This folder is no longer under active development; see db folder in [this repository](https://github.com/techequitycollaborative/legislation-tracker) instead for the latest database architecture. ⚠️_
 
 ## Credentials
 Locally configure a `credentials.ini` file. For example:
