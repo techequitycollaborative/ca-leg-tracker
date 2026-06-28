@@ -110,3 +110,38 @@ def send_pipeline_failure_alert(error_message, error_traceback=None):
         message += f"\n\n```\n{error_traceback}\n```"
 
     send_slack_alert(message, color="danger")
+
+def send_monitor_success_alert():
+    message = """✅ Snapshot and app bill data are in sync!
+
+    Monitor did not detect any missing bills from snapshot schema.
+    """
+
+    send_slack_alert(message, color="good")
+    return
+
+def send_monitor_failure_alert(missing_bill_count):
+    message = f"""⚠️ Snapshot and app bill data are out of sync!
+
+    Monitor detected {missing_bill_count} bills from snapshot that are missing 
+    from the app. Forcing a refresh for the materialized view...
+    """
+
+    send_slack_alert(message, color="warning")
+    return
+
+def send_monitor_refresh_success_alert(added_bill_count):
+    message = f"""✅ Force refresh of app data completed successfully!
+
+    Refresh added {added_bill_count} bills to the app view.
+    """
+
+    send_slack_alert(message, color="good")
+
+def send_monitor_refresh_failure_alert():
+    message = """⚠️ *Bills still missing after forced refresh!*
+
+    Please review pipeline logs to diagnose.
+    """
+
+    send_slack_alert(message, color="warning")

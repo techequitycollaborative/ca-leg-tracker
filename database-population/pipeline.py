@@ -39,9 +39,13 @@ def run_pipeline(force_update=False, dev_mode=False):
         # --- Phase 1: Fetch (no DB connection open) ---
         current_step = "bills fetch"
         last_update = bills.get_last_update_timestamp()
+        log.info(f"Timestamp watermark: updated_since={last_update.strftime('%Y-%m-%d %H:%M %Z')}")
         bill_updates = bills.fetch_updates(last_update)
         n_bills = len(bill_updates["bills"].index)
-        log.info(f"Bill fetch complete | rows={n_bills}")
+        log.info(
+            f"Bill fetch complete | rows={n_bills}, "
+            f"max_updated_at={bill_updates['bills']['updated_at'].max() if n_bills > 0 else 'n/a'}"
+        )
 
         current_step = "contacts fetch"
         contact_updates = contacts.fetch_updates()
