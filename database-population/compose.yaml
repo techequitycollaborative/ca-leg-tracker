@@ -1,6 +1,15 @@
 services:
   pipeline:
-    build: .
+    build: 
+      context: .
+      dockerfile: pipeline.Dockerfile
     volumes:
+      - ./credentials.ini:/app/credentials.ini:ro
+    restart: "no"
+  monitor:
+    build: 
+      context: .
+      dockerfile: monitor.Dockerfile
+    volumes: 
       - ./credentials.ini:/app/credentials.ini:ro
     restart: "no"
