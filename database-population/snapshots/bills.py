@@ -34,7 +34,7 @@ def get_last_update_timestamp():
 
     Retrieves a timestamp of the most recently updated bill, or default value
     """
-    query = "SELECT MAX(updated_at) FROM {0}.bill"
+    query = "SELECT MAX(updated_at::timestamp) FROM {0}.bill"
 
     with db.get_cursor() as cur:
         cur.execute(query.format(SNAPSHOT_SCHEMA))
