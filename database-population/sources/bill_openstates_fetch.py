@@ -98,7 +98,8 @@ def process_bill_json(data, last_update):
                         sponsor.append("")
                 sponsor.append(str(next_sponsor["primary"]))
                 sponsor.append(next_sponsor["classification"])
-                bill_sponsors.append(sponsor)
+                if len(sponsor) == 7: #BUGFIX: temporary hard-code the expected length since we don't have dicts
+                    bill_sponsors.append(sponsor)
             else:
                 logger.info(
                     "found sponsor of type "

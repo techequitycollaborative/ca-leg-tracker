@@ -87,6 +87,14 @@ def fetch_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_page=
             ],
             ignore_index=True,
         )
+        # Insert this before line 93 to inspect the incoming data
+        # Temporary inspection
+        # if data["bill_sponsors"]:
+        #     first_row = data["bill_sponsors"][0]
+        #     print(f"DEBUG: Row length is {len(first_row)}")
+        #     print(f"DEBUG: Raw row content: {first_row}")
+        #     print(f"DEBUG: Length of BILL_SPONSOR_COLUMNS: {len(BILL_SPONSOR_COLUMNS)}")
+
         df_bill_sponsors = pd.concat(
             [
                 df_bill_sponsors,
@@ -260,3 +268,9 @@ def upsert(cur, response):
         response["bill_votes"],
     )
     return
+
+if __name__ == "__main__":
+    with db.get_cursor() as cur:
+        last_update = get_last_update_timestamp()
+        logger.info(f"Timestamp watermark: updated_since={last_update.strftime('%Y-%m-%d %H:%M %Z')}")
+        bill_updates = fetch_updates(last_update)
