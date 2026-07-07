@@ -41,13 +41,14 @@ def scrape_committee_hearing(
         browser, page, handler = utils.make_page(source_url)
 
         # Close welcome message if detected
-        page.wait_for_selector(
+        welcome_modal = page.locator(
             "div.ui-dialog.was-welcome-message-modal.ui-widget.ui-widget-content.ui-front"
         )
-        if verbose:
-            "Closing welcome message modal"
-        close_button = page.get_by_role("button", name="Close").first
-        close_button.click()
+        if welcome_modal.is_visible(timeout=5000):
+            close_button = page.get_by_role("button", name="Close").first
+            close_button.click()
+            if verbose:
+                ("Closing welcome message modal")
 
         # Navigate to committee hearings tab
         page.wait_for_selector("div.details-wrapper-committee-hearing")
