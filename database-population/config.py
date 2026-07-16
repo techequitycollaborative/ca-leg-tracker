@@ -1,28 +1,15 @@
-"""
-Input: section string, credentials.ini
-Output: string values
+import os
+from dotenv import load_dotenv
 
-Given a section string (ex: postgres), return parameters
-"""
+# Load variables from .env - NEVER committed to Git
+# On DigitalOcean this should do nothing
+load_dotenv()
 
-from configparser import ConfigParser
-
-
-def config(section, filename="credentials.ini"):
-    # create a parser
-    parser = ConfigParser()
-    # read config file
-    parser.read(filename)
-
-    # get section, default to postgresql
-    values = {}
-    if parser.has_section(section):
-        params = parser.items(section)
-        for param in params:
-            values[param[0]] = param[1]
-    else:
-        raise Exception(
-            "Section {0} not found in the {1} file".format(section, filename)
-        )
-
-    return values
+def get_config(key, default=None):
+    """
+    Retrieves configuration value from the environment
+    """
+    value = os.getenv(key, default)
+    if not value:
+        raise EnvironmentError(f"Missing required environment. variable: {key}")
+    return value 
