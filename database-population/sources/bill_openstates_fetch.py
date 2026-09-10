@@ -98,7 +98,9 @@ def process_bill_json(data, last_update):
                         sponsor.append("")
                 sponsor.append(str(next_sponsor["primary"]))
                 sponsor.append(next_sponsor["classification"])
-                if len(sponsor) == 7: #BUGFIX: temporary hard-code the expected length since we don't have dicts
+                if (
+                    len(sponsor) == 7
+                ):  # BUGFIX: temporary hard-code the expected length since we don't have dicts
                     bill_sponsors.append(sponsor)
             else:
                 logger.info(
