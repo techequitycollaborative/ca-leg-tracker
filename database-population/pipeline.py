@@ -23,6 +23,9 @@ def run_pipeline(force_update=False, dev_mode=False):
     # Initialize dictionary in case any errors are raised
     stats = {
         "bills_updated": 0,
+        "bill_pages_fetched": 0,
+        "bill_pages_total": 0,
+        "bills_max_updated_at": "n/a",
         "hearings_updated": 0,
         "contacts_updated": 0,
         "fetch_runtime_seconds": 0,
@@ -42,9 +45,15 @@ def run_pipeline(force_update=False, dev_mode=False):
         log.info(f"Timestamp watermark: updated_since={last_update.strftime('%Y-%m-%d %H:%M %Z')}")
         bill_updates = bills.fetch_updates(last_update, max_page=bills.MAX_PAGES_PER_RUN)
         n_bills = len(bill_updates["bills"].index)
+        stats["bill_pages_fetched"] = bill_updates.get("pages_fetched", 0)
+        stats["bill_pages_total"] = bill_updates.get("pages_total", 0)
+        stats["bills_max_updated_at"] = (
+            bill_updates["bills"]["updated_at"].max() if n_bills > 0 else "n/a"
+        )
         log.info(
             f"Bill fetch complete | rows={n_bills}, "
-            f"max_updated_at={bill_updates['bills']['updated_at'].max() if n_bills > 0 else 'n/a'}"
+            f"pages={stats['bill_pages_fetched']}/{stats['bill_pages_total']}, "
+            f"max_updated_at={stats['bills_max_updated_at']}"
         )
 
         current_step = "contacts fetch"
@@ -122,6 +131,7 @@ def run_pipeline(force_update=False, dev_mode=False):
             (
                 "Pipeline complete | "
                 f"bills={stats['bills_updated']} "
+                f"bill_pages={stats['bill_pages_fetched']}/{stats['bill_pages_total']} "
                 f"hearings={stats['hearings_updated']} "
                 f"contacts={stats['contacts_updated']} "
                 f"fetch_runtime={stats['fetch_runtime_seconds']:2f}s "
