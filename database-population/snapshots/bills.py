@@ -125,6 +125,8 @@ def fetch_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_page=
         "bill_actions": df_bill_actions,
         "bill_sponsors": df_bill_sponsors,
         "bill_votes": df_bill_votes,
+        "pages_fetched": current_page,
+        "pages_total": num_pages,
     }
 
 
