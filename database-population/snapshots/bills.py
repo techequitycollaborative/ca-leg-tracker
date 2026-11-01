@@ -20,6 +20,10 @@ BILL_ACTION_COLUMNS = REQUEST_CONFIG["BILL_ACTION_COLUMNS"]
 BILL_SPONSOR_COLUMNS = REQUEST_CONFIG["BILL_SPONSOR_COLUMNS"]
 BILL_VOTE_COLUMNS = REQUEST_CONFIG["BILL_VOTE_COLUMNS"]
 
+# Openstates allows ~250 requests/day; leave headroom for retries and ad hoc runs.
+# Results are sorted updated_asc, so the next run resumes from the new watermark.
+MAX_PAGES_PER_RUN = 200
+
 
 def get_buffer(df):
     buffer = StringIO()
@@ -108,6 +112,12 @@ def fetch_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_page=
                 pd.DataFrame(data=data["bill_votes"], columns=BILL_VOTE_COLUMNS),
             ],
             ignore_index=True,
+        )
+
+    if current_page < num_pages:
+        logger.warning(
+            f"Bill fetch capped at page {current_page} of {num_pages}; "
+            "remaining pages will be fetched next run"
         )
 
     return {
