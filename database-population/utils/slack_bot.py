@@ -74,9 +74,22 @@ def send_pipeline_success_alert(stats):
     Args:
         stats: Dictionary containing pipeline run statistics
     """
-    message = f"""✅ Pipeline completed successfully!
-    
+    pages_fetched = stats.get("bill_pages_fetched", 0)
+    pages_total = stats.get("bill_pages_total", 0)
+    pages_remaining = max(pages_total - pages_fetched, 0)
+
+    if pages_remaining:
+        header = "⚠️ Pipeline completed with a partial bill fetch (catch-up in progress)"
+        color = "warning"
+    else:
+        header = "✅ Pipeline completed successfully!"
+        color = "good"
+
+    message = f"""{header}
+
 • Bills updated: {stats.get('bills_updated', 0)}
+• Bill pages fetched: {pages_fetched} of {pages_total} ({pages_remaining} remaining)
+• Bills updated through: {stats.get('bills_max_updated_at', 'n/a')}
 • Hearings updated: {stats.get('hearings_updated', 0)}
 • Contacts updated: {stats.get('contacts_updated', 0)}
 • Topics updated: {stats.get('topics_updated', 0)}
@@ -86,7 +99,7 @@ def send_pipeline_success_alert(stats):
 • Runtime (TOTAL): {stats.get('runtime_seconds', 0):.2f} seconds
     """
 
-    send_slack_alert(message, color="good")
+    send_slack_alert(message, color=color)
 
 
 def send_pipeline_failure_alert(error_message, error_traceback=None):
