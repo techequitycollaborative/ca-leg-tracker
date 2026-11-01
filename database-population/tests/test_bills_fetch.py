@@ -37,6 +37,7 @@ def test_stops_at_max_page_and_warns(fake_api, caplog):
 
     assert [page for page, _ in calls] == [1, 2, 3]
     assert len(result["bills"]) == 3
+    assert (result["pages_fetched"], result["pages_total"]) == (3, 485)
     assert "capped at page 3 of 485" in caplog.text
 
 
@@ -48,6 +49,7 @@ def test_stops_at_last_page_without_warning(fake_api, caplog):
 
     assert [page for page, _ in calls] == [1, 2]
     assert len(result["bills"]) == 2
+    assert (result["pages_fetched"], result["pages_total"]) == (2, 2)
     assert "capped" not in caplog.text
 
 
