@@ -38,6 +38,10 @@ BASE_PARAMS = {
 }
 
 
+class RateLimitExceeded(Exception):
+    """Openstates daily request limit reached (HTTP 429); retrying only burns more quota."""
+
+
 def process_bill_json(data, last_update):
     """
     Input: JSON data, update timestamp
@@ -169,6 +173,7 @@ def fetch_bill_batch(page, updated_since):
 
     Update API request parameters with page number and timestamp value (optional), and execute GET request.
     Retries up to 3 times on network errors or malformed responses.
+    Raises RateLimitExceeded without retrying on HTTP 429.
     """
     sleep(WAIT_TIME)
 
@@ -183,11 +188,15 @@ def fetch_bill_batch(page, updated_since):
     # Log and raise on bad HTTP status (4xx, 5xx) before attempting .json()
     try:
         response.raise_for_status()
-    except requests.exceptions.HTTPError as e:
+    except requests.exceptions.HTTPError:
         logging.error(
             f"HTTP {response.status_code} on page {page}: {response.text[:500]}"
         )
-        raise  # re-raise so tenacity can retry it
+        # Re-raise without the request URL, which contains the API key
+        message = f"HTTP {response.status_code} on page {page}"
+        if response.status_code == 429:
+            raise RateLimitExceeded(message) from None  # not retried
+        raise requests.exceptions.HTTPError(message, response=response) from None
 
     # Now attempt JSON parsing with visibility into what went wrong
     try:

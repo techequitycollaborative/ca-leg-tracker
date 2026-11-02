@@ -2,11 +2,17 @@
 Slack notification utilities for pipeline alerts.
 """
 
+import re
 import requests
 from config import config
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def redact_secrets(text):
+    """Mask API keys in query strings (e.g. URLs inside tracebacks)."""
+    return re.sub(r"(apikey=)[^&\s]+", r"\1[REDACTED]", text, flags=re.IGNORECASE)
 
 
 def send_slack_alert(message, channel=None, color="danger"):
@@ -18,6 +24,7 @@ def send_slack_alert(message, channel=None, color="danger"):
         channel: Optional channel override (defaults to config)
         color: Color of the alert border - "danger" (red), "warning" (yellow), or "good" (green)
     """
+    message = redact_secrets(message)
     try:
         slack_config = config("slack")
         webhook_url = slack_config.get("webhook_url")
@@ -76,9 +83,19 @@ def send_pipeline_success_alert(stats):
     """
     pages_fetched = stats.get("bill_pages_fetched", 0)
     pages_total = stats.get("bill_pages_total", 0)
-    pages_remaining = max(pages_total - pages_fetched, 0)
+    rate_limited = stats.get("bill_fetch_rate_limited", False)
 
-    if pages_remaining:
+    if pages_total is None:  # rate limited before the first page
+        pages_line = f"{pages_fetched} of unknown"
+        pages_remaining = None
+    else:
+        pages_remaining = max(pages_total - pages_fetched, 0)
+        pages_line = f"{pages_fetched} of {pages_total} ({pages_remaining} remaining)"
+
+    if rate_limited:
+        header = "⚠️ Pipeline completed with a partial bill fetch (Openstates daily limit reached)"
+        color = "warning"
+    elif pages_remaining:
         header = "⚠️ Pipeline completed with a partial bill fetch (catch-up in progress)"
         color = "warning"
     else:
@@ -88,7 +105,7 @@ def send_pipeline_success_alert(stats):
     message = f"""{header}
 
 • Bills updated: {stats.get('bills_updated', 0)}
-• Bill pages fetched: {pages_fetched} of {pages_total} ({pages_remaining} remaining)
+• Bill pages fetched: {pages_line}
 • Bills updated through: {stats.get('bills_max_updated_at', 'n/a')}
 • Hearings updated: {stats.get('hearings_updated', 0)}
 • Contacts updated: {stats.get('contacts_updated', 0)}

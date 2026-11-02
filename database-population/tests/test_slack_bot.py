@@ -42,3 +42,23 @@ def test_complete_bill_fetch_is_success(sent):
     assert color == "good"
     assert "completed successfully" in message
     assert "5 of 5 (0 remaining)" in message
+
+
+def test_rate_limited_fetch_is_warning(sent):
+    slack_bot.send_pipeline_success_alert(
+        {"bill_pages_fetched": 0, "bill_pages_total": None, "bill_fetch_rate_limited": True}
+    )
+
+    message, color = sent[0]
+    assert color == "warning"
+    assert "daily limit reached" in message
+    assert "0 of unknown" in message
+
+
+def test_redact_secrets_masks_api_key():
+    text = "429 for url: https://v3.openstates.org/bills?page=1&apikey=f3b4-SECRET&include=votes"
+
+    redacted = slack_bot.redact_secrets(text)
+
+    assert "f3b4-SECRET" not in redacted
+    assert "apikey=[REDACTED]&include=votes" in redacted

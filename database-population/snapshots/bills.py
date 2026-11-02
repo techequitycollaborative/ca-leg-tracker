@@ -65,13 +65,22 @@ def fetch_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_page=
 
     current_page = start_page - 1
     num_pages = start_page
+    rate_limited = False
 
     while current_page < num_pages and current_page < max_page:
-        current_page = current_page + 1
         # Imported function from fetching scripts
-        data, num_pages = openstates.get_bill_data(
-            page=current_page, updated_since=updated_since
-        )
+        try:
+            data, num_pages = openstates.get_bill_data(
+                page=current_page + 1, updated_since=updated_since
+            )
+        except openstates.RateLimitExceeded as e:
+            # Keep the pages already fetched; sorted updated_asc, so the next run resumes after them
+            logger.warning(
+                f"Openstates rate limit reached ({e}); keeping {current_page} fetched pages"
+            )
+            rate_limited = True
+            break
+        current_page = current_page + 1
         logger.info(
             "Finished fetching page "
             + str(current_page)
@@ -114,7 +123,7 @@ def fetch_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_page=
             ignore_index=True,
         )
 
-    if current_page < num_pages:
+    if not rate_limited and current_page < num_pages:
         logger.warning(
             f"Bill fetch capped at page {current_page} of {num_pages}; "
             "remaining pages will be fetched next run"
@@ -126,7 +135,9 @@ def fetch_updates(updated_since=LAST_UPDATED_DEFAULT, max_page=1000, start_page=
         "bill_sponsors": df_bill_sponsors,
         "bill_votes": df_bill_votes,
         "pages_fetched": current_page,
-        "pages_total": num_pages,
+        # Total is unknown if the first page was never fetched
+        "pages_total": num_pages if current_page > 0 else None,
+        "rate_limited": rate_limited,
     }
 
 

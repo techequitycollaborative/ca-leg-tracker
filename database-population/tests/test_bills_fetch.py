@@ -11,9 +11,11 @@ from snapshots import bills
 def fake_api(monkeypatch):
     calls = []
 
-    def install(num_pages):
+    def install(num_pages, rate_limit_at=None):
         def get_bill_data(page=1, updated_since=None):
             calls.append((page, updated_since))
+            if page == rate_limit_at:
+                raise bills.openstates.RateLimitExceeded(f"HTTP 429 on page {page}")
             bill = [f"ocd-bill/{page}"] + [""] * (len(bills.BILL_COLUMNS) - 1)
             data = {
                 "bills": [bill],
@@ -60,3 +62,27 @@ def test_forwards_watermark_to_every_page(fake_api):
 
     assert len(calls) == 5
     assert {since for _, since in calls} == {"2026-10-01T00:00:00"}
+
+
+def test_rate_limit_keeps_fetched_pages(fake_api, caplog):
+    calls = fake_api(num_pages=485, rate_limit_at=3)
+
+    with caplog.at_level(logging.WARNING, logger=bills.__name__):
+        result = bills.fetch_updates("2026-10-01T00:00:00", max_page=200)
+
+    assert [page for page, _ in calls] == [1, 2, 3]
+    assert len(result["bills"]) == 2
+    assert (result["pages_fetched"], result["pages_total"]) == (2, 485)
+    assert result["rate_limited"] is True
+    assert "rate limit reached" in caplog.text
+    assert "capped" not in caplog.text
+
+
+def test_rate_limit_on_first_page_returns_empty(fake_api):
+    fake_api(num_pages=485, rate_limit_at=1)
+
+    result = bills.fetch_updates("2026-10-01T00:00:00", max_page=200)
+
+    assert len(result["bills"]) == 0
+    assert (result["pages_fetched"], result["pages_total"]) == (0, None)
+    assert result["rate_limited"] is True
