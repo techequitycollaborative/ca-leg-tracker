@@ -26,6 +26,7 @@ def run_pipeline(force_update=False, dev_mode=False):
         "bill_pages_fetched": 0,
         "bill_pages_total": 0,
         "bills_max_updated_at": "n/a",
+        "bill_fetch_rate_limited": False,
         "hearings_updated": 0,
         "contacts_updated": 0,
         "fetch_runtime_seconds": 0,
@@ -47,12 +48,14 @@ def run_pipeline(force_update=False, dev_mode=False):
         n_bills = len(bill_updates["bills"].index)
         stats["bill_pages_fetched"] = bill_updates.get("pages_fetched", 0)
         stats["bill_pages_total"] = bill_updates.get("pages_total", 0)
+        stats["bill_fetch_rate_limited"] = bill_updates.get("rate_limited", False)
         stats["bills_max_updated_at"] = (
             bill_updates["bills"]["updated_at"].max() if n_bills > 0 else "n/a"
         )
         log.info(
             f"Bill fetch complete | rows={n_bills}, "
             f"pages={stats['bill_pages_fetched']}/{stats['bill_pages_total']}, "
+            f"rate_limited={stats['bill_fetch_rate_limited']}, "
             f"max_updated_at={stats['bills_max_updated_at']}"
         )
 
