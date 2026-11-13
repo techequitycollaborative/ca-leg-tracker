@@ -1,3 +1,5 @@
+"""End-to-end pipeline run with fetches stubbed out, writing against the real database inside a transaction that is always rolled back (see conftest.py)."""
+
 import logging
 
 import pipeline
@@ -29,11 +31,9 @@ def test_run_pipeline_end_to_end(
     assert errors == []
 
     cur = patched_db
-    cur.execute(
-        f"SELECT COUNT(*) FROM {SNAPSHOT_SCHEMA}.bill WHERE openstates_bill_id = %s",
-        (marker,),
-    )
-    assert cur.fetchone()[0] == 1
+    assert count_rows(cur, "bill WHERE openstates_bill_id = %s", marker) == 1
+    assert count_rows(cur, "people_contacts WHERE staffer_contact = %s", f"{marker} Staffer") == 1
+
     cur.execute(
         f"""
         SELECT COUNT(*)
@@ -44,8 +44,8 @@ def test_run_pipeline_end_to_end(
         (f"{marker} Committee", marker),
     )
     assert cur.fetchone()[0] == 1
-    cur.execute(
-        f"SELECT COUNT(*) FROM {SNAPSHOT_SCHEMA}.people_contacts WHERE staffer_contact = %s",
-        (f"{marker} Staffer",),
-    )
-    assert cur.fetchone()[0] == 1
+
+
+def count_rows(cur, table_and_filter, *params):
+    cur.execute(f"SELECT COUNT(*) FROM {SNAPSHOT_SCHEMA}.{table_and_filter}", params)
+    return cur.fetchone()[0]
