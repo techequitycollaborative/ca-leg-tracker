@@ -12,6 +12,8 @@ SHEET_LINKS = {
 
 KEYWORDS_TO_SKIP = {"VICE CHAIR", "CHAIR", "By issue area"}
 
+VACANT_MEMBER_VALUES = {"ZZ-VACANT", "VACANT", ""}
+
 SEPARATORS = ["\\+", "/", "&", ",", " and ", ";", "\\n"]
 
 
@@ -36,8 +38,9 @@ def scrape_clean_sheet(chamber: str) -> pd.DataFrame:
         df["district_number"] = df["District"].str.replace("SD", "").astype(int)
     logger.debug("Converted district identifiers to integers")
 
-    # drop vacant districts
-    df = df.loc[~df["Member"].str.contains("ZZ-VACANT")]
+    # drop vacant districts (marked "ZZ-VACANT", "VACANT", or left blank)
+    member = df["Member"].fillna("").str.strip()
+    df = df.loc[~member.isin(VACANT_MEMBER_VALUES)]
     logger.debug("Removed vacant districts")
 
     # TODO: verify surname and district number matches OpenStates data
