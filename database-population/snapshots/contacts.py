@@ -15,10 +15,15 @@ CONTACTS_COLUMNS = REQUEST_CONFIG["CONTACTS_COLUMNS"]
 
 def fetch_updates():
     logger.info("Fetching Capitol Codex...")
-    assembly_update = codex.extract_contacts("asm")
-    senate_update = codex.extract_contacts("sen")
-
-    return {"lower": assembly_update, "upper": senate_update}
+    updates = {}
+    for key, chamber in (("lower", "asm"), ("upper", "sen")):
+        try:
+            updates[key] = codex.extract_contacts(chamber)
+        except Exception as e:
+            logger.warning(
+                f"[CONTACTS] Skipping Capitol Codex scrape for {chamber}: {e!r}"
+            )
+    return updates
 
 
 def update(cur, contact_data, chamber):
