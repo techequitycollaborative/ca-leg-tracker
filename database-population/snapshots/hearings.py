@@ -36,8 +36,25 @@ INCOMING_HEARING_BILLS_TABLE = "incoming_" + HEARING_BILLS_TABLE
 
 def fetch_updates():
     logger.info("Fetching hearing schedule...")
-    assembly_hearings, assembly_bills = assembly.scrape_committee_hearing(verbose=True)
-    senate_hearings, senate_bills = senate.scrape_committee_hearing(verbose=True)
+    assembly_result = assembly.scrape_committee_hearing(verbose=True)
+    senate_result = senate.scrape_committee_hearing(verbose=True)
+
+    # Scrapers return None on failure. Skip the whole hearings update rather than
+    # writing one chamber: cancel_missing_hearings would cancel the failed
+    # chamber's upcoming hearings because they are absent from the incoming data.
+    failed = [
+        chamber
+        for chamber, result in (("ASM", assembly_result), ("SEN", senate_result))
+        if result is None
+    ]
+    if failed:
+        logger.warning(
+            f"Skipping hearings update: {', '.join(failed)} scrape failed"
+        )
+        return set(), set()
+
+    assembly_hearings, assembly_bills = assembly_result
+    senate_hearings, senate_bills = senate_result
 
     logger.info(
         f"[ASM] {len(assembly_hearings)} hearings; {len(assembly_bills)} bills retrieved"

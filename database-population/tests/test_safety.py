@@ -1,3 +1,5 @@
+"""Checks that the DB-write test harness can never commit, plus informational server diagnostics."""
+
 import psycopg2
 import pytest
 

@@ -1,3 +1,5 @@
+"""DB-write test for contacts.update against the real database inside a transaction that is always rolled back (see conftest.py)."""
+
 from snapshots import contacts
 from tests.conftest import SNAPSHOT_SCHEMA
 

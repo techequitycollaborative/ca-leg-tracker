@@ -1,3 +1,5 @@
+"""Materialized view refresh tests (incl. PG17 search_path behavior) against the real database inside a transaction that is always rolled back (see conftest.py)."""
+
 import warnings
 
 import pytest

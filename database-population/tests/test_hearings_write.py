@@ -1,3 +1,5 @@
+"""DB-write tests for hearings.upsert against the real database inside a transaction that is always rolled back (see conftest.py)."""
+
 import datetime as dt
 
 from snapshots import bills, hearings
