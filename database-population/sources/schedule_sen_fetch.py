@@ -38,24 +38,16 @@ def scrape_committee_hearing(
         logger.debug(query_url)
 
     # Calendar v2.0
-    hearing_cache = {}  # key: (date, name) -> {'index': int, 'bills': set, ...}
+    hearing_cache = {}  # key: (date, name, time, location, room) -> {'index': int, 'bills': list, ...}
+    browser = page = handler = None
 
     # Try connecting to page
     try:
         browser, page, handler = utils.make_page(query_url)
-        # Skip to the end if no events are found
-        #
-        no_results = page.wait_for_selector("div.no-results-message", timeout=5000)
-        if no_results:
-            logger.info("No results returned from Senate Calendar.")
-            pass
-        else:
-            parse_query_blocks(hearing_cache, verbose, page)
-
-        browser.close()
-        logger.debug("Closed Senate browser")
-
+        parse_query_blocks(hearing_cache, verbose, page)
     except Exception as e:
+        # Return None (not an empty result) so callers can tell a failed scrape
+        # from a calendar with no hearings
         logger.error(f"[SEN] Daily File scrape failed: {e}")
         return None
     finally:
@@ -65,9 +57,10 @@ def scrape_committee_hearing(
             browser.close()
         if handler:
             handler.stop()
+        logger.debug("Closed Senate browser")
 
-        # Build final results from cache
-        return utils.normalize_scraper_results(hearing_cache, "SEN")
+    # Build final results from cache
+    return utils.normalize_scraper_results(hearing_cache, "SEN")
 
 
 def main():
@@ -131,7 +124,12 @@ def parse_hearing_details(current_hearing):
         "div.attribute.page-events__time-location",
         False,
     )
-    current_time_verbatim, current_loc = current_details.split(" - ")
+    # e.g. "Time: 3:30 p.m. - 1021 O Street, Room 2200", sometimes with extra
+    # segments in between like "- (Closed Session) -": first is time, last is location
+    parts = current_details.split(" - ")
+    if len(parts) < 2:
+        raise ValueError(f"Unexpected time/location format: {current_details!r}")
+    current_time_verbatim, current_loc = parts[0], parts[-1]
     current_time_verbatim = current_time_verbatim.replace("Time: ", "")
     current_time, is_allday = utils.normalize_hearing_time(current_time_verbatim)
     if current_loc.count(",") == 1 and "Room" in current_loc:
@@ -141,7 +139,7 @@ def parse_hearing_details(current_hearing):
         current_room = ""
     return {
         "time_verbatim": current_time_verbatim,
-        "time": current_time,
+        "time_normalized": current_time,
         "is_allday": is_allday,
         "location": current_location,
         "room": current_room,
@@ -183,11 +181,10 @@ def extract_hearings_for_date(current_wrapper, hearing_cache, verbose, page):
             # Extract details like time, location, room
             try:
                 current_details = parse_hearing_details(current_hearing)
-            except:
+            except Exception as e:
                 logger.warning(
-                    f"No time or location details could be extracted for {current_name} on {current_date}"
+                    f"No time or location details could be extracted for {current_name} on {current_date}: {e!r}"
                 )
-                logger.debug(current_details)
                 continue
 
             hearing_key = (
@@ -226,16 +223,24 @@ def extract_hearings_for_date(current_wrapper, hearing_cache, verbose, page):
     return
 
 
-def parse_query_blocks(hearing_cache, verbose, page):
-    # iterate over date wrapper blocks
-    page.wait_for_selector("div.page-events--day-wrapper")
-    if verbose:
-        logger.debug("Found events by date")
-    wrappers = page.locator("div.page-events--day-wrapper")
-    wrapper_count = wrappers.count()
+DAY_WRAPPER_SELECTOR = "div.page-events--day-wrapper"
+NO_RESULTS_SELECTOR = "div.no-results-message"
 
+
+def parse_query_blocks(hearing_cache, verbose, page):
+    # The calendar renders either date blocks or a "No events are scheduled." message
+    page.wait_for_selector(f"{DAY_WRAPPER_SELECTOR}, {NO_RESULTS_SELECTOR}")
+    wrappers = page.locator(DAY_WRAPPER_SELECTOR)
+    wrapper_count = wrappers.count()
+    if wrapper_count == 0:
+        logger.info("No results returned from Senate Calendar.")
+        return
+    if verbose:
+        logger.debug(f"Found events for {wrapper_count} dates")
+
+    # iterate over date wrapper blocks
     logger.debug("Preparing to scrape Senate Daily File")
-    for (i,) in range(wrapper_count):
+    for i in range(wrapper_count):
         # Extract current date
         current_wrapper = wrappers.nth(i)
         extract_hearings_for_date(current_wrapper, hearing_cache, verbose, page)
