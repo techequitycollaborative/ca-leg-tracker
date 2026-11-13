@@ -1,28 +1,40 @@
+"""Unit tests for skipping failed Capitol Codex scrapes in contacts.fetch_updates (no network)."""
+
 import logging
+
+import pytest
 
 from snapshots import contacts
 
 
-def _raise_for(failing):
-    def fake_extract(chamber):
-        if chamber in failing:
-            raise TypeError("bad operand type for unary ~: 'float'")
-        return {}
+@pytest.fixture
+def scraper_failing_for(monkeypatch):
+    """Make extract_contacts raise for the given chambers and return no contacts for the rest."""
 
-    return fake_extract
+    def install(*failing_chambers):
+        def extract_contacts(chamber):
+            if chamber in failing_chambers:
+                raise TypeError("bad operand type for unary ~: 'float'")
+            return {}
+
+        monkeypatch.setattr(contacts.codex, "extract_contacts", extract_contacts)
+
+    return install
 
 
-def test_fetch_skips_failing_chamber(monkeypatch, caplog):
-    monkeypatch.setattr(contacts.codex, "extract_contacts", _raise_for({"asm"}))
+@pytest.mark.parametrize(
+    "failing, expected",
+    [
+        (["asm"], {"upper": {}}),
+        (["sen"], {"lower": {}}),
+        (["asm", "sen"], {}),
+    ],
+)
+def test_failed_chamber_is_skipped_with_warning(scraper_failing_for, caplog, failing, expected):
+    scraper_failing_for(*failing)
+
     with caplog.at_level(logging.WARNING, logger=contacts.logger.name):
-        result = contacts.fetch_updates()
+        assert contacts.fetch_updates() == expected
 
-    assert result == {"upper": {}}
-    assert any(
-        r.levelno == logging.WARNING and "asm" in r.getMessage() for r in caplog.records
-    )
-
-
-def test_fetch_skips_all_chambers(monkeypatch):
-    monkeypatch.setattr(contacts.codex, "extract_contacts", _raise_for({"asm", "sen"}))
-    assert contacts.fetch_updates() == {}
+    for chamber in failing:
+        assert f"Skipping Capitol Codex scrape for {chamber}" in caplog.text
