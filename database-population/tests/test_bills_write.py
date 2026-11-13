@@ -1,3 +1,5 @@
+"""DB-write tests for bills.upsert against the real database inside a transaction that is always rolled back (see conftest.py)."""
+
 from snapshots import bills
 from tests.conftest import SNAPSHOT_SCHEMA, drop_temp_tables
 
